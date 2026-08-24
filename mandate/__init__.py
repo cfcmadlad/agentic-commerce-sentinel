@@ -1,0 +1,1 @@
+"""Layer 1: mandate schema, Ed25519 signing, and verification."""

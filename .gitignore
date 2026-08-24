@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg
+build/
+dist/
+
+# Generated synthetic data and eval artifacts are large and reproducible
+# from the committed generator; do not commit them.
+/data/
+/artifacts/
+*.parquet
+
+.DS_Store
+.env

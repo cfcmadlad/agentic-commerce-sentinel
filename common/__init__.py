@@ -1,0 +1,1 @@
+"""Types shared across the mandate, generator, features, and eval layers."""

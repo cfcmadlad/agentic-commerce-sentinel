@@ -1,0 +1,1 @@
+"""Synthetic traffic generation: legitimate sessions and attack classes (Days 1-2)."""

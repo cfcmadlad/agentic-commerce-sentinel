@@ -1,0 +1,64 @@
+[project]
+name = "sentinel"
+version = "0.1.0"
+description = "Agentic-Commerce Transaction Sentinel: mandate verification, scope enforcement, and behavioral anomaly detection for AI-agent-initiated payments."
+requires-python = ">=3.11,<3.13"
+readme = "README.md"
+license = { text = "MIT" }
+
+# Pinned to exact resolved versions (see pip freeze in dev environment).
+# Exact pins, not ranges, because the eval numbers in Section 6 must be
+# reproducible from a clean clone months from now, not "whatever resolves today."
+dependencies = [
+    "pydantic==2.13.4",
+    "cryptography==50.0.0",
+    "numpy==2.5.2",
+    "scipy==1.18.1",
+    "scikit-learn==1.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.4",
+    "mypy==2.3.1",
+]
+# Layers 4-7 dependencies (LLM reasoning, service, dashboard) are added when
+# those days start, not pinned speculatively now.
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F: pyflakes+pycodestyle core. D: pydocstyle (PEP 257 docstrings are mandatory
+# in this repo, not optional). ANN: require type annotations. B: bugbear catches
+# real correctness bugs (mutable defaults, etc), which matters more here than style.
+select = ["E", "F", "D", "ANN", "B", "I"]
+ignore = ["D203", "D213"]  # conflicting docstring formatting rules, pick one style below
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+# Pinned to 3.12, not the 3.11 floor in requires-python, because numpy
+# 2.5.2's own .pyi stubs use PEP 695 `type` statements unconditionally and
+# fail to parse under a declared 3.11 target — a numpy/mypy stub issue, not
+# a constraint on our code. Our source still avoids any 3.12-only syntax
+# (checked by ruff's target-version = "py311" above), so runtime
+# compatibility with 3.11 is enforced there instead of here.
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

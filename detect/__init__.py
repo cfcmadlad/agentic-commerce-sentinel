@@ -1,0 +1,1 @@
+"""Layer 2: deterministic scope enforcement and behavioral anomaly detection (Days 3-4)."""

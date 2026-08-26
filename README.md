@@ -36,7 +36,7 @@ Once an agent can spend money on someone's behalf, a second question appears tha
 
 A concrete example: a user tells their grocery-shopping agent, "spend up to ₹2,000/month on groceries." Every resulting transaction can be completely legitimate by every classical signal — real card, real merchant, real device, no stolen credentials anywhere — and still be exactly the failure this project exists to catch, if the agent quietly spends ₹8,000 on electronics instead. The card isn't stolen. The agent is simply acting outside the authority it was given.
 
-This project is a verification layer for that specific failure mode: it checks an agent's cryptographically signed authorization, enforces the spending scope that authorization actually grants, and — once the behavioral layer is complete — watches for sessions that don't look like the agent that was supposed to be acting.
+This project is a verification layer for that specific failure mode: it checks an agent's cryptographically signed authorization, enforces the spending scope that authorization actually grants, and watches for sessions that don't look like the agent that was supposed to be acting — even when nothing about the authorization itself is wrong.
 
 ## 2. Why this doesn't duplicate Razorpay's existing stack
 
@@ -58,8 +58,8 @@ Three detection layers feed a reasoning/audit layer:
 |---|---|---|
 | **1. Mandate verification** | Is the agent's signed authorization genuine, unexpired, bound to this agent's registered key, and not already used up? | **Built** |
 | **2. Scope enforcement** | Does this specific transaction — amount, merchant, item category, timing — fit inside what the mandate actually authorizes? | **Built** |
-| **3. Behavioral anomaly detection** | Does this agent's session look like the agent it claims to be, based on patterns the first two layers structurally cannot see? | **Not yet built** |
-| **4. Reasoning & audit** | Given the deterministic layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the deterministic layers already decided. | **Not yet built** |
+| **3. Behavioral anomaly detection** | Does this agent's session look like the agent it claims to be, based on patterns the first two layers structurally cannot see? | **Built** |
+| **4. Reasoning & audit** | Given the deterministic and learned layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the earlier layers already decided. | **Not yet built** |
 
 Every decision the finished system makes writes an append-only audit record, and every block is designed to be human-reviewable. This is a **detector and verifier**, not an autonomous enforcement system — see [§10](#10-defense-only-by-design) for why that's a hard constraint here, not a nicety.
 
@@ -67,7 +67,7 @@ Every decision the finished system makes writes an append-only audit record, and
 
 Layers 1 and 2 are deterministic on purpose. A spending ceiling, a merchant allowlist, a time window — these are facts that can be checked exactly, with no tolerance and no learned uncertainty, and a reviewer should be able to reproduce the verdict by hand from the mandate and the transaction alone.
 
-Layer 3 exists because some attacks are *not* expressible as a rule. An agent that presents a completely genuine, in-scope, unexpired mandate — but is being driven by something other than the agent it claims to be — passes Layers 1 and 2 by construction. That isn't a gap in the rules; it's the boundary of what rules can see at all. This is also why the project's own evaluation is designed to prove that boundary exists rather than assume it: see [§7](#7-evaluation-results-so-far).
+Layer 3 exists because some attacks are *not* expressible as a rule. An agent that presents a completely genuine, in-scope, unexpired mandate — but is being driven by something other than the agent it claims to be — passes Layers 1 and 2 by construction. That isn't a gap in the rules; it's the boundary of what rules can see at all. Layer 3 is combined with Layers 1 and 2 through a strict ensemble rule: the deterministic layers can only ever be *added to*, never overridden. A session Layer 1 or 2 already blocks stays blocked regardless of what Layer 3's score says; Layer 3 can only extend coverage into the sessions the deterministic layers already let through. This means a bug or drift in the learned layer can, at worst, fail to catch something new — it can never unblock something the deterministic layers correctly flagged.
 
 ### Data flow
 
@@ -81,12 +81,11 @@ flowchart TD
     L2["Layer 2 — Scope enforcement\namount · merchant · category · window"] -->|passes| L3
     L2 -->|fails| R2["Reject\nover ceiling / wrong merchant /\nwrong category / outside window"]
 
-    L3["Layer 3 — Behavioral anomaly detection\n(not yet built)"] -->|clean| L4
-    L3 -->|flagged| ESC["Escalate to human review"]
+    L3["Layer 3 — Behavioral anomaly detection\ngradient-boosted model over causal features"] -->|score below threshold| L4
+    L3 -->|score at or above threshold| ESC["Escalate to human review"]
 
     L4["Layer 4 — Reasoning & audit log\nnarrates the decision, never overrides it\n(not yet built)"] --> OUT["Authorization proceeds"]
 
-    style L3 stroke-dasharray: 5 5
     style L4 stroke-dasharray: 5 5
 ```
 
@@ -126,14 +125,27 @@ Like Layer 1, every rule that fires is collected, not just the first. And every 
 
 ### Rules-only baseline
 
-`detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model (once built) has to beat with statistical significance, or get dropped from the design. See [§7](#7-evaluation-results-so-far).
+`detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model has to beat with statistical significance, or get dropped from the design entirely. See [§7](#7-evaluation-results-so-far).
 
-### Feature extraction (built, not yet consumed by a model)
+### Feature extraction (`/features`)
 
 `features/session.py` extracts a causal feature vector from each session — event timing and regularity, session composition (which lifecycle stages are present), and features relative to the agent's and mandate's own prior history (time since last use, prior session count, amount relative to the agent's running mean). Two design choices matter here:
 
 - **Causality.** Every history-relative feature only sees sessions that occurred *before* the one being featurized. A corpus-wide aggregate (e.g. an agent's mean amount computed over the whole dataset) would leak information from future sessions backward into earlier ones — a leak that looks like excellent offline performance and produces nothing useful in production.
 - **Structural label isolation.** The extractor's function signatures only accept a `SessionTrace`, never a `LabeledSession` (the wrapper that carries ground truth). This means a feature can only become a function of the label if a developer deliberately reaches into a wrapper object the extractor has no ordinary reason to touch — and there's a test that parses the module's own source as an AST and asserts it contains no reference to the label fields at all, so the guarantee doesn't rest on remembering to keep it.
+
+### Behavioral anomaly detection (Layer 3, `/detect`)
+
+Four modules, each with a narrow job:
+
+- **`behavioral.py`** — a gradient-boosted classifier trained *only* on the residual set: sessions the rules-only baseline already let through. This is the property that keeps the model's reported performance honest — it never gets credit for re-catching an attack Layers 1 and 2 already catch, because it never sees those sessions during training. Training uses a chronological split (train / validation / test, in time order, never shuffled), with hard gates on minimum row counts and minimum positive-class size so the model fails loudly on too little data rather than fitting anyway.
+- **`calibration.py`** — turns the model's raw score into a block/allow decision. The threshold is chosen to minimize expected cost under an explicit, named, documented false-negative-to-false-positive cost ratio (`DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO`), rather than picked by eyeballing a precision/recall tradeoff. That ratio is a stated assumption, not measured data — no real fraud-loss or support-cost figures exist for a synthetic-data submission — so the module also produces a sensitivity sweep across a range of plausible ratios, reporting how much the chosen threshold would move if the assumption were wrong.
+- **`ensemble.py`** — combines the Layer 1/2 verdict with the Layer 3 score under the one-directional rule described in [§3](#3-architecture): rules can add a block, never remove one.
+- **`attribution.py`** — SHAP feature attribution, both a global ranking (which features matter most on average) and a per-session breakdown (which features drove one specific score). The per-session breakdown is what the reasoning layer will eventually narrate from.
+
+### Significance testing (`/eval`)
+
+`eval/significance.py` implements a paired McNemar test — the correct comparison when two classifiers (rules-only baseline vs. ensemble) are scored on the *same* sessions, since their errors are paired rather than independent. `eval/milestone_a.py` runs the full pipeline end to end and reports the comparison; results are in [§7](#7-evaluation-results-so-far).
 
 ## 5. Synthetic data: how it's generated and why it can be trusted
 
@@ -149,6 +161,8 @@ All data used in this project is synthetic, generated by a fully parameterized, 
 
 **Anti-rigging enforced structurally.** Every generated session carries its ground-truth label (`LabeledSession`) wrapped separately from the raw session data (`SessionTrace`), so passing the raw trace into a detector or feature extractor is the only thing that type-checks without deliberate effort. This is the same mechanism described in [§4](#4-whats-built-and-how-it-works) for feature extraction, applied at the generator level too.
 
+**Attack-variant hardness is a deliberate, documented choice, not a default.** The scripted-client pacing and browse-skip probability that define the `behavioral_only` impersonation variant were widened specifically so that no single feature threshold could separate it from legitimate traffic — see `docs/adr/0001-attack-variant-hardness.md` for the reasoning and the diagnostic that validated it.
+
 ## 6. Attack taxonomy
 
 Three classes of attack are generated and used for evaluation. A fourth class is deliberately withheld from every stage of development.
@@ -159,7 +173,7 @@ An agent presents an authorization it shouldn't be able to use again, in one of 
 
 - **Expired** — the mandate lapsed hours to days ago. Caught by Layer 1's time-window check.
 - **Budget exhausted** — the mandate's transaction count is already fully consumed by legitimate use. Caught by Layer 1's ledger check, but only if the ledger has actually processed the legitimate sessions that spent it — this variant specifically tests that statefulness.
-- **Rapid reuse** — the mandate is genuine, unexpired, in-scope, and still has budget remaining. Layers 1 and 2 both pass it. The only thing wrong is the *cadence*: a reuse seconds-to-minutes behind the previous legitimate use, in a gap the legitimate generator's own minimum reuse interval never produces. This is the variant that justifies a behavioral layer existing at all.
+- **Rapid reuse** — the mandate is genuine, unexpired, in-scope, and still has budget remaining. Layers 1 and 2 both pass it. The only thing wrong is the *cadence*: a reuse seconds-to-minutes behind the previous legitimate use, in a gap the legitimate generator's own minimum reuse interval never produces. This is one of the two variants Layer 3 exists to catch.
 
 ### 2. Scope violation
 
@@ -172,11 +186,11 @@ A client that is not the registered agent drives a session as though it were, ac
 - **Unregistered key** — the impostor mints its own keypair and self-signs a plausible mandate. Caught by Layer 1: no registered key for that agent/key pair.
 - **Forged signature** — a genuine mandate is copied with an inflated scope, keeping the original signature. Caught by Layer 1's signature check.
 - **Agent binding mismatch** — a genuine, correctly signed, in-window mandate belonging to a *different* agent is presented. Every cryptographic check passes; only Layer 2's binding rule catches it.
-- **Behavioral only** — the impostor is operating a genuine agent's genuine mandate, fully in scope, in window, in budget. Nothing cryptographic or scope-related is wrong. What differs is pacing: faster, more uniform event timing than the legitimate distribution, and the catalog-browse stage is skipped more often (a scripted client that already knows what it wants). Layers 1 and 2 both pass this variant. This is the second variant, alongside rapid-reuse replay, that a rules-only system structurally cannot catch.
+- **Behavioral only** — the impostor is operating a genuine agent's genuine mandate, fully in scope, in window, in budget. Nothing cryptographic or scope-related is wrong. What differs is pacing: faster, more uniform event timing than the legitimate distribution, and the catalog-browse stage is skipped more often (a scripted client that already knows what it wants). Layers 1 and 2 both pass this variant. This is the other variant, alongside rapid-reuse replay, that a rules-only system structurally cannot catch — and the one Layer 3's evaluation in §7 is built around.
 
 ### Held-out class: mandate chaining / privilege escalation
 
-An agent uses a legitimate small mandate to bootstrap a larger, unauthorized action. This class is **not implemented, not parameterized, and not referenced anywhere in the current codebase** — a test in the corpus builder enforces this mechanically, so the guarantee doesn't rest on memory. It will be built and evaluated exactly once, after every other design decision is finalized, specifically so it cannot be tuned against — a model that's never seen a class of attack and still performs reasonably against it is a much stronger claim than one that's been iterated against every class it's scored on.
+An agent uses a legitimate small mandate to bootstrap a larger, unauthorized action. This class is **not implemented, not parameterized, and not referenced anywhere in the current codebase** — a test in the corpus builder enforces this mechanically, so the guarantee doesn't rest on memory. It will be built and evaluated exactly once, after every other design decision (including Layer 3's) is finalized, specifically so it cannot be tuned against — a model that's never seen a class of attack and still performs reasonably against it is a much stronger claim than one that's been iterated against every class it's scored on.
 
 ### Which layer catches which variant
 
@@ -207,17 +221,17 @@ flowchart LR
     S1 --> L2["Layer 2\nScope enforcement"]
     I3 --> L2
 
-    R3 --> L3["Layer 3\nBehavioral anomaly detection\n(not yet built)"]
+    R3 --> L3["Layer 3\nBehavioral anomaly detection"]
     I4 --> L3
-
-    style L3 stroke-dasharray: 5 5
 ```
 
-Everything feeding Layer 1 or Layer 2 above is caught today. Rapid reuse and behavioral-only impersonation are the two variants with nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results-so-far) show.
+Everything feeding Layer 1 or Layer 2 above is caught by the deterministic rules alone. Rapid reuse and behavioral-only impersonation have nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results-so-far) show, both before and after Layer 3 was added.
 
 ## 7. Evaluation results so far
 
-The rules-only baseline (Layers 1 and 2, no learned model) has been run against a corpus of 8,000 legitimate sessions plus a matching attack budget at a 4% base rate:
+### Rules-only baseline
+
+Run against a corpus of 8,000 legitimate sessions plus a matching attack budget at a 4% base rate:
 
 **Overall:** precision 1.0000, recall 0.7477 (TP / FP / TN / FN = 249 / 0 / 8000 / 84)
 
@@ -227,13 +241,33 @@ The rules-only baseline (Layers 1 and 2, no learned model) has been run against 
 | Scope violation | 1.000 | all five variants 1.00 |
 | Agent impersonation | 0.576 | `unregistered_key` 1.00 · `forged_signature` 1.00 · `agent_binding_mismatch` 1.00 · `behavioral_only` **0.00** |
 
-Two things about these numbers need to be said plainly rather than left implicit:
+Two things about these numbers need to be said plainly rather than left implicit. **Perfect precision and perfect scope-violation recall are expected properties of a correct system, not achievements to point at** — the legitimate generator constructs every session inside its own mandate's scope by construction, so zero false positives means the generator and the scope engine agree about what a mandate's scope is, and scope-violation recall is 1.00 because Layer 2 is definitionally the oracle for that class. **The number that actually matters is the 84 misses, and where they are** — both rules-invisible variants sitting at exactly 0.00 recall, which is the precise, deliberately constructed gap Layer 3 exists to close.
 
-**Perfect precision and perfect scope-violation recall are expected properties of a correct system, not achievements to point at.** The legitimate generator constructs every session inside its own mandate's scope by construction, so zero false positives means the generator and the scope engine agree about what a mandate's scope is — not that the detector is impressively selective. Scope-violation recall is 1.00 because Layer 2 is definitionally the oracle for that class; what actually stress-tests Layer 2 is the *margin* those violations are generated at (fractions of a percent, minutes past a window), not the recall number itself.
+### Layer 3 (behavioral model + ensemble)
 
-**The number that actually matters is the 84 misses, and where they are.** Every one of them is in the two rules-invisible variants — rapid-reuse replay and behavioral-only impersonation — both sitting at exactly 0.00 recall under the rules-only baseline. That's not a flaw to fix in Layers 1 and 2; it's the precise, deliberately constructed gap that Layer 3 exists to close, and it's the empirical evidence (not just the architectural argument in §3) that a learned layer belongs in this system.
+Run against a larger corpus (20,000 legitimate sessions, same 4% base rate) with a chronological 60/20/20 train/validation/test split. The model trains only on the training block's residual (rules-allowed) sessions; the threshold is calibrated on the validation block's residual; the reported comparison below is on the **entire held-out test block — all sessions, not just its residual** — since "does adding Layer 3 improve overall detection" has to be answered on the full population a deployed system would actually see, not on the subset already selected to favor it.
 
-A preliminary, untuned diagnostic (gradient boosting over the causal features from §4, run only against the sessions the rules baseline lets through, chronological 70/30 split) recovers a substantial fraction of that gap — while no single feature threshold gets close on its own — which is the signal that a proper behavioral model is worth building rather than being a checkbox layer. That diagnostic is not the finished Layer 3 and isn't reported here as a final metric; a real evaluation (AUC-PR with bootstrap confidence intervals, calibration, per-class breakdown, significance testing against this same rules baseline, and a false-positive-cost threshold sweep) is the standard the finished behavioral layer will be held to before any number from it is presented as a result.
+| | Precision | Recall |
+|---|---|---|
+| Rules-only baseline (test block) | 1.0000 | 0.8297 |
+| Ensemble (test block) | 0.9785 | 0.9976 |
+
+**Significance:** paired McNemar test, ensemble vs. rules-only baseline on the same test-block sessions — p ≈ 1.4 × 10⁻¹², a highly significant improvement. This is the number the project's own standing policy is keyed to: if Layer 3 hadn't cleared this bar, it would have been reported as not earning its place and dropped from the design, not re-tuned until it did.
+
+**The variants that mattered:**
+
+| Variant | Rules-only recall | Ensemble recall |
+|---|---|---|
+| `rapid_reuse` | 0.00 | 1.00 |
+| `behavioral_only` | 0.02 | 0.98 |
+
+Every rules-visible variant (over-ceiling amounts, wrong merchant, wrong category, forged signatures, and so on) stayed at 1.00 recall under both — which is expected and correct, since the ensemble only ever adds blocks on sessions the deterministic layers already let through, and can't change the outcome on sessions they already catch.
+
+**This result was checked for leakage before being reported, not just accepted.** A result this strong (near-perfect recall on a variant deliberately hardened to resist single-feature separation) is exactly the kind of number that deserves suspicion rather than a victory lap. Three checks were run: an isolated two-class ablation (behavioral-only vs. legitimate alone, ignoring the other attack classes) confirmed real but weaker signal in isolation (AUC-PR 0.47), ruling out the joint-training result being a training-population artifact alone; a "junk features" test — training on only clock-time, amount, and session-composition flags, features with no intended behavioral content — scored at base-rate AUC-PR (0.017 against a 0.018 prevalence), ruling out a shared generator artifact leaking the label; and the raw score distribution was inspected directly, showing a genuine separation (legitimate sessions clustering near a score of 0, `behavioral_only` sessions averaging 0.61) rather than a fragile threshold artifact. The full reasoning is in `docs/adr/0001-attack-variant-hardness.md`.
+
+**Threshold calibration.** The reported ensemble numbers use a threshold selected to minimize expected cost under an assumed 10:1 false-negative-to-false-positive cost ratio — a stated assumption (see [§4](#4-whats-built-and-how-it-works)), not a measured one. A sensitivity sweep across cost ratios from 1:1 to 30:1 is reported alongside the chosen threshold in every run of `run_milestone_a.py`, so the dependence on that assumption is visible rather than hidden behind a single number.
+
+**What this is not yet.** This is Milestone A's result, not the complete evaluation this project is committed to. Bootstrap confidence intervals, a DeLong test, a full false-positive-cost threshold sweep (rather than one chosen point), per-decision latency, and a sensitivity analysis across generator parameters are still to come — see [§9](#9-whats-not-built-yet-and-why).
 
 ## 8. Why AP2, not NPCI's UAP
 
@@ -243,23 +277,23 @@ It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this w
 
 ## 9. What's not built yet, and why
 
-**Behavioral anomaly detection (Layer 3).** The feature extraction pipeline is built and tested; the model itself is not. The plan is a gradient-boosted baseline first (fast to train, hard to overfit invisibly, and a fair comparator), with a sequence model considered only if the baseline demonstrably needs it — starting with a heavier model before proving a simpler one is insufficient would be building complexity the evaluation hasn't earned yet.
+**Full evaluation harness.** Milestone A's numbers in §7 are real and independently checked for leakage, but the complete evaluation this project is committed to — bootstrap confidence intervals, a DeLong test, calibration curves and Brier score, a full false-positive-cost threshold sweep across the entire range (not one chosen point), end-to-end decision latency as a p50/p95/p99 distribution, and a sensitivity analysis across a grid of generator parameters — is not yet built. This is the next milestone in progress.
 
-**Reasoning and audit layer (Layer 4).** This will consume the deterministic layers' structured output and produce a plain-language explanation of each decision — never a score, and never able to override what the deterministic layers decided. Deliberately last in the build order, because a narration layer over decisions that don't yet exist would be narrating nothing.
+**Held-out attack class (mandate chaining).** Deliberately untouched, per [§6](#6-attack-taxonomy) — will be generated in a separate context with no detector visibility and evaluated exactly once, after Milestones A and B are both frozen.
 
-**Full evaluation harness.** The rules-baseline numbers in §7 are real, but the complete evaluation this project is committed to — AUC-PR with bootstrap confidence intervals, calibration curves, per-attack-class breakdown, DeLong and McNemar significance tests against the rules baseline, and a full false-positive-cost threshold sweep — is not yet built. The rules baseline exists specifically so that whatever comes out of that harness for Layer 3 has something honest to be compared against.
+**Reasoning and audit layer (Layer 4).** Will consume the structured output of Layers 1–3 (including Layer 3's SHAP attribution) and produce a plain-language explanation of each decision — never a score, and never able to override what the earlier layers decided. Deliberately built after Layer 3, because a narration layer over a behavioral score that didn't exist yet would be narrating nothing.
 
-**Service and dashboard layers.** A FastAPI service and a Streamlit dashboard for interacting with the system are planned but not started; they depend on the reasoning layer existing first.
+**Service and frontend layers.** A FastAPI service and a web frontend are planned but not started. The frontend's scope has been deliberately reduced from the original three-view design to a live demo view plus a static export of the evaluation results, to fit the remaining timeline without cutting the evaluation rigor in §7–9 to make room. An MCP connector was cut from scope entirely for the same reason — see `docs/PROJECT_PLAN.md` for the full reasoning behind these cuts.
 
 ## 10. Defense-only, by design
 
-This project is a **detector and verifier**, not an enforcement or offensive system, at every layer including the ones not yet built. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
+This project is a **detector and verifier**, not an enforcement or offensive system, at every layer including the ones not yet built. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Layer 3's model is trained and evaluated the same way: it only ever adds a block on top of what Layers 1 and 2 already allow, and it cannot override a deterministic rejection. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
 
 ## 11. Known limitations, stated plainly
 
-**All data is synthetic.** Every session, mandate, and attack in this project comes from the generator in `/generator` — none of it is real transaction data. This is a genuine limitation on how far these numbers generalize, not a hidden one. The anti-rigging measures throughout this document — a held-out attack class never trained or tuned against, ground-truth labels that structurally cannot leak into features, full reproducibility from a committed seed, boundary-hard rather than extreme attack generation — exist specifically to make the resulting metrics as credible as a synthetic dataset can be, and every number this project reports is intended to be presented alongside this caveat, not around it.
+**All data is synthetic.** Every session, mandate, and attack in this project comes from the generator in `/generator` — none of it is real transaction data. This is a genuine limitation on how far these numbers generalize, not a hidden one. The anti-rigging measures throughout this document — a held-out attack class never trained or tuned against, ground-truth labels that structurally cannot leak into features, full reproducibility from a committed seed, boundary-hard rather than extreme attack generation, and the leak-check discipline described in §7 — exist specifically to make the resulting metrics as credible as a synthetic dataset can be, and every number this project reports is intended to be presented alongside this caveat, not around it.
 
-**The behavioral layer's real-world transfer is the biggest open question.** The rules layers (mandate verification, scope enforcement) are deterministic checks against explicit, auditable logic — they would transfer directly to real mandate and transaction data with no retraining. A learned behavioral model trained on synthetic session timing almost certainly would not transfer as cleanly, since real agent traffic will not match this generator's timing distribution exactly. This is the layer most likely to need retraining or recalibration before any production use, and that's stated here rather than left for someone else to discover.
+**The behavioral layer's real-world transfer is the biggest open question.** The rules layers (mandate verification, scope enforcement) are deterministic checks against explicit, auditable logic — they would transfer directly to real mandate and transaction data with no retraining. Layer 3, now built, is trained entirely on synthetic session timing; real agent traffic will not match this generator's timing distribution exactly, and the model's strong performance in §7 is a claim about this synthetic distribution, not a guarantee about production traffic. This is the layer most likely to need retraining or recalibration before any real use, and that's stated here rather than left for someone else to discover. A cost-ratio assumption drives the operating threshold (§4, §7) and is likewise stated rather than presented as measured fact.
 
 ## 12. Repository structure
 
@@ -267,14 +301,18 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 /mandate      mandate schema, Ed25519 signing, verification
 /common       shared session trace / ground-truth label types
 /generator    legitimate traffic generator, attack generators (3 of 4 classes)
-/detect       scope-enforcement rules engine, rules-only baseline
+/detect       scope-enforcement rules engine, rules-only baseline,
+              behavioral model, calibration, ensemble, SHAP attribution
 /features     causal feature extraction for the behavioral model
-/eval         rules-baseline evaluation harness
+/eval         rules-baseline and Milestone A evaluation harnesses,
+              paired significance testing
 /reasoning    reasoning/audit layer (not yet implemented)
 /service      API service (not yet implemented)
-/dashboard    dashboard (not yet implemented)
-tests/        120 tests, covering every layer above that's built
-run_gate.py   command-line entry point for the rules-baseline evaluation
+/frontend     web frontend (not yet implemented)
+/docs/adr     architecture decision records
+tests/        168 tests, covering every layer above that's built
+run_gate.py         command-line entry point for the rules-baseline evaluation
+run_milestone_a.py  command-line entry point for the Layer 3 pipeline
 ```
 
 ## 13. Running this yourself
@@ -285,10 +323,11 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 120 passed
+pytest -q                                              # expect: 168 passed
 ruff check .                                           # expect: All checks passed!
 mypy mandate common generator detect features eval tests   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
+python run_milestone_a.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
 ```
 
 Generate a batch of synthetic sessions and inspect them directly:

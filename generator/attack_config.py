@@ -95,11 +95,16 @@ IMPERSONATION_MIX_BEHAVIORAL_ONLY = 0.45
 # Event pacing for a scripted client. Legitimate sessions jitter 2-45s between
 # lifecycle stages; a scripted one is faster and far more regular. The ranges
 # overlap the legitimate floor deliberately so the two distributions are not
-# linearly separable on a single timing feature.
+# linearly separable on a single timing feature. Widened to 1-20s (rather
+# than a narrower fast-only band) so the upper end of scripted pacing sits
+# well inside legitimate territory - a model that separates this class has
+# to use more than raw speed.
 MIN_SCRIPTED_EVENT_GAP_SECONDS = 1
-MAX_SCRIPTED_EVENT_GAP_SECONDS = 6
+MAX_SCRIPTED_EVENT_GAP_SECONDS = 20
 
 # Probability a behavioral-only impersonation skips the catalog-browse stage
-# entirely (a scripted client that already knows the SKU it wants). Not 1.0:
-# an always-present marker would be a single-rule giveaway.
-SKIP_BROWSE_PROBABILITY = 0.6
+# entirely (a scripted client that already knows the SKU it wants). Held
+# below 0.5 so browse-skipping is a minority pattern within the class, not a
+# majority one - an always-or-mostly-present marker would still function as
+# a near-single-rule giveaway even at less than 1.0.
+SKIP_BROWSE_PROBABILITY = 0.35

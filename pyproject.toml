@@ -33,7 +33,7 @@ build-backend = "setuptools.build_meta"
 include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*"]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]

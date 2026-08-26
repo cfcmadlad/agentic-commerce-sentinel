@@ -4,9 +4,9 @@ Each session is a full, internally consistent flow: an agent, acting for a
 fixed home user, is issued (or reuses) a signed mandate scoped to one
 merchant category, then completes a session whose amount, merchant, and
 item category all fall inside that mandate's scope. This is deliberately
-the easy case — Day 2 builds the attack generator that violates exactly the
-invariants this module is careful to uphold, which is what makes those
-violations meaningful signal rather than arbitrary noise.
+the easy case: the attack generators violate exactly the invariants
+this module is careful to uphold, which is what makes those violations
+meaningful signal rather than arbitrary noise.
 
 Reproducibility: every random draw goes through a single
 `numpy.random.Generator` seeded from the caller's `seed` argument, so a
@@ -23,7 +23,7 @@ from uuid import UUID
 import numpy as np
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from common.schema import AttackClass, EventType, LabeledSession, SessionEvent, SessionTrace
+from common.schema import AttackClass, LabeledSession, SessionEvent, SessionTrace
 from generator.config import (
     AGENT_POOL_SIZE,
     CATEGORY_CONFIGS,
@@ -45,41 +45,28 @@ from generator.config import (
     CategoryConfig,
     compute_params_digest,
 )
+from generator.events import LEGITIMATE_LIFECYCLE, build_events
+from generator.rng import rng_nonce, rng_uuid
 from mandate.schema import Mandate, MandateScope, SignedMandate
 from mandate.signing import key_id_for_public_key, keypair_from_seed_bytes, sign_mandate
 from mandate.verification import AgentKeyRegistry, MandateLedger
 
 AMOUNT_QUANTIZE = Decimal("0.01")
 
+# Probability an agent's category preferences are a single category rather
+# than two. Most real deployed agents are single-purpose.
+SINGLE_CATEGORY_PROBABILITY = 0.7
 
-def _rng_uuid(rng: np.random.Generator) -> UUID:
-    """Derives a UUID from the seeded generator, instead of `uuid.uuid4`.
+# Probability a freshly issued mandate is pinned to one specific merchant
+# rather than to its whole category.
+SINGLE_MERCHANT_SCOPE_PROBABILITY = 0.5
 
-    `uuid.uuid4()` reads OS entropy directly and is not reproducible across
-    runs regardless of any seed passed elsewhere; every ID in this
-    generator must route through `rng` for a given seed to reproduce
-    byte-identical output.
+# Fraction of a reused mandate's remaining ceiling a session may consume, so
+# a legitimate reuse sits inside budget with margin rather than at the edge.
+REUSE_CEILING_HEADROOM = 0.98
 
-    Args:
-        rng: Seeded random generator.
-
-    Returns:
-        A UUID built from 16 random bytes drawn from `rng`.
-    """
-    return UUID(bytes=rng.bytes(16))
-
-
-def _rng_nonce(rng: np.random.Generator) -> str:
-    """Derives a mandate nonce from the seeded generator.
-
-    Args:
-        rng: Seeded random generator.
-
-    Returns:
-        A 32-character hex string, well above `Mandate.nonce`'s minimum
-        length.
-    """
-    return rng.bytes(16).hex()
+# Bytes of seed material required to derive one Ed25519 private key.
+ED25519_SEED_BYTES = 32
 
 
 @dataclass(frozen=True)
@@ -111,13 +98,13 @@ class LegitimateGeneratorOutput:
         labeled_sessions: The generated sessions, each labeled LEGITIMATE.
         signed_mandates: Every mandate issued during generation, keyed by
             mandate_id, including mandates reused across multiple sessions.
-        registry: Public keys for every simulated agent, pre-populated so a
-            downstream verifier can check these sessions without a separate
-            setup step.
+        registry: Public keys for every simulated agent.
         ledger: Usage counts reflecting every mandate redemption recorded
-            during generation, so a downstream verifier sees accurate
-            remaining budgets rather than starting from a ledger that
-            thinks every mandate is unused.
+            during generation.
+        agents: The simulated agent pool, exposed so the attack generators
+            can act as (or impersonate) these same identities
+            rather than inventing a disjoint population that a detector
+            could trivially separate on agent_id alone.
         seed: The seed used, for reproducibility.
         params_digest: Digest of the generator parameters in effect.
     """
@@ -126,6 +113,7 @@ class LegitimateGeneratorOutput:
     signed_mandates: dict[UUID, SignedMandate]
     registry: AgentKeyRegistry
     ledger: MandateLedger
+    agents: tuple[AgentProfile, ...]
     seed: int
     params_digest: str
 
@@ -144,12 +132,12 @@ def _build_agent_pool(
     """
     agents: list[AgentProfile] = []
     for i in range(AGENT_POOL_SIZE):
-        private_key, public_key = keypair_from_seed_bytes(rng.bytes(32))
+        private_key, public_key = keypair_from_seed_bytes(rng.bytes(ED25519_SEED_BYTES))
         agent_id = f"agent-{i:03d}"
         key_id = key_id_for_public_key(public_key)
         registry.register(agent_id, key_id, public_key)
 
-        num_categories = 1 if rng.random() < 0.7 else 2
+        num_categories = 1 if rng.random() < SINGLE_CATEGORY_PROBABILITY else 2
         chosen = rng.choice(
             np.array(CATEGORY_CONFIGS, dtype=object), size=num_categories, replace=False
         )
@@ -172,8 +160,7 @@ def _pick_category(rng: np.random.Generator, agent: AgentProfile) -> CategoryCon
         agent: The agent generating a session.
 
     Returns:
-        One of the agent's preferred categories, weighted by each
-        category's configured GMV weight.
+        One of the agent's preferred categories, weighted by GMV weight.
     """
     weights = np.array([c.gmv_weight for c in agent.preferred_categories])
     weights = weights / weights.sum()
@@ -181,16 +168,19 @@ def _pick_category(rng: np.random.Generator, agent: AgentProfile) -> CategoryCon
     return agent.preferred_categories[index]
 
 
-def _sample_amount(
+def sample_amount(
     rng: np.random.Generator, category: CategoryConfig, ceiling: Decimal | None = None
 ) -> Decimal:
     """Samples a transaction amount for a category from a clipped log-normal.
 
+    Public because the attack generators must draw amounts from the identical
+    distribution for in-scope fields; an attack session whose amount came from
+    a different distribution would leak its label.
+
     Args:
         rng: Seeded random generator.
         category: The category whose median/sigma parameterize the draw.
-        ceiling: If given, the amount is capped at 98% of this value, so a
-            reused mandate's remaining budget is respected with margin.
+        ceiling: If given, the amount is capped just below this value.
 
     Returns:
         A positive amount, quantized to 2 decimal places.
@@ -201,7 +191,7 @@ def _sample_amount(
     high = median * MAX_AMOUNT_MULTIPLE_OF_MEDIAN
     draw = float(np.clip(draw, low, high))
     if ceiling is not None:
-        draw = min(draw, float(ceiling) * 0.98)
+        draw = min(draw, float(ceiling) * REUSE_CEILING_HEADROOM)
     return Decimal(str(round(draw, 2))).quantize(AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP)
 
 
@@ -218,12 +208,11 @@ def _issue_mandate(
 
     Returns:
         A tuple of (signed mandate, the transaction amount this mandate's
-        ceiling was derived from). The caller must use this exact amount
-        for the session that triggers issuance, rather than sampling a new
-        one — a second independent draw is not guaranteed to fall under the
-        ceiling computed from the first.
+        ceiling was derived from). The caller must use this exact amount for
+        the session that triggers issuance rather than sampling a new one - a
+        second independent draw is not guaranteed to fall under the ceiling.
     """
-    base_amount = _sample_amount(rng, category)
+    base_amount = sample_amount(rng, category)
     ceiling_multiple = rng.uniform(MIN_SCOPE_CEILING_MULTIPLE, MAX_SCOPE_CEILING_MULTIPLE)
     max_amount = (base_amount * Decimal(str(ceiling_multiple))).quantize(
         AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP
@@ -232,7 +221,7 @@ def _issue_mandate(
     lifetime_days = int(rng.integers(MIN_MANDATE_LIFETIME_DAYS, MAX_MANDATE_LIFETIME_DAYS + 1))
     valid_until = issued_at + timedelta(days=lifetime_days)
 
-    restrict_to_single_merchant = rng.random() < 0.5
+    restrict_to_single_merchant = rng.random() < SINGLE_MERCHANT_SCOPE_PROBABILITY
     allowed_merchant_ids = (
         frozenset({str(rng.choice(np.array(category.merchant_ids)))})
         if restrict_to_single_merchant
@@ -253,13 +242,13 @@ def _issue_mandate(
     )
     key_id = key_id_for_public_key(agent.private_key.public_key())
     mandate = Mandate(
-        mandate_id=_rng_uuid(rng),
+        mandate_id=rng_uuid(rng),
         agent_id=agent.agent_id,
         user_id=agent.home_user_id,
         parent_mandate_id=None,
         issued_at=issued_at,
         expires_at=valid_until,
-        nonce=_rng_nonce(rng),
+        nonce=rng_nonce(rng),
         scope=scope,
         signer_key_id=key_id,
     )
@@ -269,31 +258,22 @@ def _issue_mandate(
 def _build_events(
     rng: np.random.Generator, started_at: datetime
 ) -> tuple[list[SessionEvent], datetime]:
-    """Builds a realistic event sequence for one session.
+    """Builds a realistic legitimate event sequence for one session.
 
     Args:
         rng: Seeded random generator.
         started_at: Timestamp of the first event.
 
     Returns:
-        A tuple of (events, completed_at), where completed_at is the
-        timestamp of the final event.
+        A tuple of (events, completed_at).
     """
-    stages = (
-        EventType.INTENT_CAPTURED,
-        EventType.MANDATE_PRESENTED,
-        EventType.CATALOG_BROWSE,
-        EventType.CART_BUILD,
-        EventType.PAYMENT_ATTEMPT,
-        EventType.PAYMENT_RESULT,
+    return build_events(
+        rng,
+        started_at,
+        LEGITIMATE_LIFECYCLE,
+        MIN_EVENT_GAP_SECONDS,
+        MAX_EVENT_GAP_SECONDS,
     )
-    events: list[SessionEvent] = []
-    current = started_at
-    for stage in stages:
-        events.append(SessionEvent(event_type=stage, timestamp=current, payload={}))
-        gap = rng.integers(MIN_EVENT_GAP_SECONDS, MAX_EVENT_GAP_SECONDS + 1)
-        current = current + timedelta(seconds=int(gap))
-    return events, events[-1].timestamp
 
 
 def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGeneratorOutput:
@@ -305,8 +285,8 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
             produces the same output.
 
     Returns:
-        The generated sessions plus the supporting registry and ledger
-        state needed to verify them.
+        The generated sessions plus the supporting registry, ledger and agent
+        pool needed to verify them and to build attack traffic against them.
 
     Raises:
         ValueError: If `n_sessions` is not positive.
@@ -348,7 +328,7 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
             signed = existing
             category_name = next(iter(signed.mandate.scope.allowed_merchant_categories))
             category = next(c for c in CATEGORY_CONFIGS if c.name == category_name)
-            amount = _sample_amount(rng, category, ceiling=signed.mandate.scope.max_amount)
+            amount = sample_amount(rng, category, ceiling=signed.mandate.scope.max_amount)
         else:
             category = _pick_category(rng, agent)
             signed, amount = _issue_mandate(rng, agent, category, issued_at=session_start)
@@ -365,7 +345,7 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
 
         events, completed_at = _build_events(rng, session_start)
         trace = SessionTrace(
-            session_id=_rng_uuid(rng),
+            session_id=rng_uuid(rng),
             agent_id=agent.agent_id,
             user_id=agent.home_user_id,
             mandate_id=signed.mandate.mandate_id,
@@ -398,6 +378,7 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
         signed_mandates=signed_mandates,
         registry=registry,
         ledger=ledger,
+        agents=tuple(agents),
         seed=seed,
         params_digest=params_digest,
     )

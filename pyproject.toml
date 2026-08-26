@@ -6,9 +6,8 @@ requires-python = ">=3.11,<3.13"
 readme = "README.md"
 license = { text = "MIT" }
 
-# Pinned to exact resolved versions (see pip freeze in dev environment).
-# Exact pins, not ranges, because the eval numbers in Section 6 must be
-# reproducible from a clean clone months from now, not "whatever resolves today."
+# Pinned to exact resolved versions rather than ranges, so eval numbers are
+# reproducible from a clean clone regardless of what resolves later.
 dependencies = [
     "pydantic==2.13.4",
     "cryptography==50.0.0",
@@ -23,8 +22,8 @@ dev = [
     "ruff==0.16.4",
     "mypy==2.3.1",
 ]
-# Layers 4-7 dependencies (LLM reasoning, service, dashboard) are added when
-# those days start, not pinned speculatively now.
+# Reasoning, service, and dashboard dependencies are added when those
+# modules are implemented, not pinned speculatively now.
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -34,13 +33,13 @@ build-backend = "setuptools.build_meta"
 include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 110
 target-version = "py311"
 
 [tool.ruff.lint]
-# E/F: pyflakes+pycodestyle core. D: pydocstyle (PEP 257 docstrings are mandatory
-# in this repo, not optional). ANN: require type annotations. B: bugbear catches
-# real correctness bugs (mutable defaults, etc), which matters more here than style.
+# E/F: pyflakes+pycodestyle core. D: pydocstyle (Google-style docstrings are
+# mandatory). ANN: require type annotations. B: bugbear catches real
+# correctness bugs (mutable defaults, etc), which matters more here than style.
 select = ["E", "F", "D", "ANN", "B", "I"]
 ignore = ["D203", "D213"]  # conflicting docstring formatting rules, pick one style below
 
@@ -51,9 +50,9 @@ convention = "google"
 # Pinned to 3.12, not the 3.11 floor in requires-python, because numpy
 # 2.5.2's own .pyi stubs use PEP 695 `type` statements unconditionally and
 # fail to parse under a declared 3.11 target — a numpy/mypy stub issue, not
-# a constraint on our code. Our source still avoids any 3.12-only syntax
-# (checked by ruff's target-version = "py311" above), so runtime
-# compatibility with 3.11 is enforced there instead of here.
+# a constraint on our code. Source avoids any 3.12-only syntax (checked by
+# ruff's target-version = "py311" above), so 3.11 runtime compatibility is
+# enforced there instead of here.
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true

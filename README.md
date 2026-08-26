@@ -2,77 +2,282 @@
 
 **A defense-only verification layer that checks whether an AI agent's payment stays inside what its human actually authorized — before the payment goes through.**
 
-Razorpay AI Buildathon 2026 · Track 02, AI Risk Manager
-**Status: Day 1 of 7 build days.** This document describes what has been built and verified so far, and is explicit about what has not been built yet.
+Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager).
 
 ---
 
-## 1. The problem, in plain terms
+## Table of contents
 
-Until recently, "is this payment fraudulent" meant checking the card, the device, the location, the merchant. All of that assumed a human was the one clicking "pay."
+1. [What problem this solves](#1-what-problem-this-solves)
+2. [Why this doesn't duplicate Razorpay's existing stack](#2-why-this-doesnt-duplicate-razorpays-existing-stack)
+3. [Architecture](#3-architecture)
+4. [What's built, and how it works](#4-whats-built-and-how-it-works)
+5. [Synthetic data: how it's generated and why it can be trusted](#5-synthetic-data-how-its-generated-and-why-it-can-be-trusted)
+6. [Attack taxonomy](#6-attack-taxonomy)
+7. [Evaluation results so far](#7-evaluation-results-so-far)
+8. [Why AP2, not NPCI's UAP](#8-why-ap2-not-npcis-uap)
+9. [What's not built yet, and why](#9-whats-not-built-yet-and-why)
+10. [Defense-only, by design](#10-defense-only-by-design)
+11. [Known limitations, stated plainly](#11-known-limitations-stated-plainly)
+12. [Repository structure](#12-repository-structure)
+13. [Running this yourself](#13-running-this-yourself)
 
-That assumption is breaking. In February 2026, Razorpay and NPCI launched agentic UPI payments built on Claude, with Zomato, Swiggy, and Zepto as initial partners — an AI agent can now complete a UPI purchase on a user's behalf without the user tapping "confirm" each time. NPCI is separately developing a Unified Agent Protocol to register, verify, and authorize AI agents across the whole UPI network, not just individual pilots.
+---
 
-Once an agent can spend money on your behalf, a new question appears that no existing fraud system asks: **not "is this transaction fraudulent," but "is this agent staying inside what the human actually agreed to."**
+## 1. What problem this solves
 
-A concrete example: a user tells their grocery-shopping agent, "you can spend up to ₹2,000/month on groceries." Every one of the resulting transactions can be completely legitimate by every classical signal — real card, real merchant, real device, no stolen credentials anywhere in sight — and still be exactly the failure this project is built to catch, if the agent quietly buys ₹8,000 of electronics instead. The card isn't stolen. The agent is just acting outside its authority.
+Fraud detection today asks one question: *is this transaction fraudulent?* It checks the card, the device, the location, the merchant — all on the assumption that a human is the one clicking "pay."
 
-Nobody has published an open, measurably-evaluated defensive layer for that specific failure mode. This project builds one.
+That assumption no longer holds everywhere. Razorpay and NPCI have launched agentic UPI payments built on Claude, with Zomato, Swiggy, and Zepto as initial partners — an AI agent can complete a UPI purchase on a user's behalf without the user confirming each individual transaction. NPCI is separately developing a Unified Agent Protocol (UAP) to register and authorize AI agents across the UPI network more broadly.
 
-## 2. Why Razorpay's existing stack doesn't already cover this
+Once an agent can spend money on someone's behalf, a second question appears that no existing fraud system asks:
 
-Razorpay already runs a serious risk stack, and this project is deliberately scoped to not duplicate any of it:
+> **Not "is this transaction fraudulent," but "is this agent staying inside what the human actually agreed to."**
+
+A concrete example: a user tells their grocery-shopping agent, "spend up to ₹2,000/month on groceries." Every resulting transaction can be completely legitimate by every classical signal — real card, real merchant, real device, no stolen credentials anywhere — and still be exactly the failure this project exists to catch, if the agent quietly spends ₹8,000 on electronics instead. The card isn't stolen. The agent is simply acting outside the authority it was given.
+
+This project is a verification layer for that specific failure mode: it checks an agent's cryptographically signed authorization, enforces the spending scope that authorization actually grants, and — once the behavioral layer is complete — watches for sessions that don't look like the agent that was supposed to be acting.
+
+## 2. Why this doesn't duplicate Razorpay's existing stack
+
+Razorpay already runs a serious risk stack. This project is deliberately scoped to sit next to it, not inside it:
 
 | Existing system | What it does | What it doesn't do |
 |---|---|---|
-| **Vulcan** | Razorpay's payments foundation model — per-transaction fraud scoring, routing, return-to-origin decisions | Doesn't know what a human authorized an *agent* to do; scores the transaction, not the authorization |
+| **Vulcan** | Payments foundation model — per-transaction fraud scoring, routing, return-to-origin decisions | Doesn't know what a human authorized an *agent* to do; scores the transaction, not the authorization behind it |
 | **Bumblebee** | Multi-agent risk review of merchants at onboarding | Operates on merchants, not on individual agent-initiated transactions |
 | **Agent Studio** (Dispute Responder, Subscription Recovery, Abandoned Cart, Cashflow Forecaster, RTO Shield) | Post-hoc and operational tooling for merchants | None of these verify a cryptographic mandate or enforce a spending scope before authorization |
 
-The gap is specific: nothing in Razorpay's stack today verifies a signed authorization from a human, checks whether an agent's transaction fits inside it, or watches for behavioral drift in how an agent uses that authorization over time. That's the layer this project adds, sitting in front of authorization rather than reviewing after the fact.
+Nothing in that stack today verifies a signed authorization from a human, checks whether an agent's transaction fits inside it, or watches for behavioral drift in how an agent uses that authorization over time. That's the gap this project fills — sitting in front of authorization, not reviewing after the fact.
 
-## 3. What the finished system is designed to do
+## 3. Architecture
 
-The full design has four detection layers feeding into one reasoning/audit layer. Not all of them exist yet — the table below states current status honestly rather than describing the target architecture as if it were already built.
+Three detection layers feed a reasoning/audit layer:
 
 | Layer | Purpose | Status |
 |---|---|---|
-| **1. Mandate verification** | Is the agent's signed authorization genuine, unexpired, bound to this agent's registered key, and not already used up? | ✅ **Built, tested (Day 1)** |
-| **2. Scope enforcement** | Does this specific transaction — amount, merchant, item category, timing — fit inside what the mandate actually authorizes? | 🔜 Day 3 |
-| **3. Behavioral anomaly detection** | Does this agent's session look like a legitimate agent, a bot impersonating one, or a compromised agent, based on patterns rules can't express? | 🔜 Day 4 |
-| **4. LLM reasoning & audit** | Given the three deterministic layers' outputs, write a plain-language explanation of the decision. Never sets the score itself — only narrates what the deterministic layers already decided. | 🔜 Day 6 |
+| **1. Mandate verification** | Is the agent's signed authorization genuine, unexpired, bound to this agent's registered key, and not already used up? | **Built** |
+| **2. Scope enforcement** | Does this specific transaction — amount, merchant, item category, timing — fit inside what the mandate actually authorizes? | **Built** |
+| **3. Behavioral anomaly detection** | Does this agent's session look like the agent it claims to be, based on patterns the first two layers structurally cannot see? | **Not yet built** |
+| **4. Reasoning & audit** | Given the deterministic layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the deterministic layers already decided. | **Not yet built** |
 
-Every decision the finished system makes will write an append-only audit record, and every automated block will be human-reviewable — this is a **detector and verifier**, not an autonomous enforcement system, and it is designed to escalate to a human rather than act alone. See [Section 8](#8-defense-only-by-design) for why that matters for this track specifically.
+Every decision the finished system makes writes an append-only audit record, and every block is designed to be human-reviewable. This is a **detector and verifier**, not an autonomous enforcement system — see [§10](#10-defense-only-by-design) for why that's a hard constraint here, not a nicety.
 
-## 4. What's actually built and verified right now — Day 1
+### Why the split between deterministic and learned layers
 
-Everything below has been implemented, unit-tested, and passed a clean lint and strict type-check pass, not just designed.
+Layers 1 and 2 are deterministic on purpose. A spending ceiling, a merchant allowlist, a time window — these are facts that can be checked exactly, with no tolerance and no learned uncertainty, and a reviewer should be able to reproduce the verdict by hand from the mandate and the transaction alone.
 
-**Mandate verification (Layer 1)**
-- A cryptographically signed mandate format (`Mandate`, `MandateScope`, `SignedMandate`) that encodes exactly what a human authorized: a spending ceiling, allowed merchant categories (and optionally specific merchants), allowed item categories, a valid time window, and a maximum number of times the mandate can be used.
-- Ed25519 digital signatures over a deterministic, byte-exact encoding of every mandate, so a mandate cannot be altered after signing without invalidating the signature.
-- A verifier that checks four independent things about a presented mandate — genuine signature from a registered key, not expired, within its valid window, and not already spent past its usage budget — and reports *every* reason a mandate fails, not just the first one found, so an audit trail can say "this was rejected for being both expired and over-budget" rather than hiding the second reason.
+Layer 3 exists because some attacks are *not* expressible as a rule. An agent that presents a completely genuine, in-scope, unexpired mandate — but is being driven by something other than the agent it claims to be — passes Layers 1 and 2 by construction. That isn't a gap in the rules; it's the boundary of what rules can see at all. This is also why the project's own evaluation is designed to prove that boundary exists rather than assume it: see [§7](#7-evaluation-results-so-far).
 
-**Synthetic data generator**
-- A fully parameterized generator that produces realistic legitimate agent sessions: a simulated population of AI agents (each with its own signing key and category preferences), a simulated population of users, and transaction amounts drawn from distributions loosely grounded in public 2025–2026 Indian e-commerce market data (category GMV share and average order value from Mordor Intelligence, IMARC, and the Bain & Company/Flipkart "How India Shops Online 2025" report).
-- Every session includes a full lifecycle trace (intent captured → mandate presented → catalog browsed → cart built → payment attempted → payment result), with realistic timing jitter between steps.
-- Fully reproducible: every random decision — including which cryptographic keys get generated and which UUIDs get assigned — is derived from a single seed, so the exact same synthetic dataset can be regenerated by anyone from a clean clone. This matters directly for the evaluation honesty this track requires: a reviewer doesn't have to take our word for the numbers later, they can regenerate the exact data those numbers came from.
+### Data flow
 
-**Anti-rigging safeguard, built into the type system, not just a policy**
-- Every generated session carries a ground-truth label (`LabeledSession`) that wraps the session data rather than sitting alongside it. This is deliberate: it means passing the raw session into a feature extractor or detector is the only thing that type-checks in the code, and leaking the ground-truth label into a feature would require a developer to deliberately reach into a wrapper object detector code has no ordinary reason to touch. The rule "no feature may be a deterministic function of the label" is enforced structurally, not left to be remembered.
+```mermaid
+flowchart TD
+    A["Agent presents a signed mandate + transaction"] --> L1
 
-**Verification**
-- 47 automated tests, all passing, covering mandate validation rules, signature forgery/tampering resistance, every verification failure mode, and generator correctness (including a direct check that every synthetically generated "legitimate" session actually passes mandate verification when replayed through a ledger in chronological order — the generator is checked against the verifier it will eventually be scored by, not assumed to be correct).
-- Clean `ruff` lint pass and a clean **strict** `mypy` type-check pass across all source and test code.
-- Confirmed reproducible from a genuinely clean environment: a fresh Python virtual environment, dependencies installed from a full pinned lock file, tests re-run — 47/47, unchanged.
+    L1["Layer 1 — Mandate verification\nsignature · expiry · budget"] -->|passes| L2
+    L1 -->|fails| R1["Reject\nunknown signer / bad signature /\nexpired / budget exhausted"]
 
-## 5. A note on sourcing: why this follows AP2, not NPCI's UAP
+    L2["Layer 2 — Scope enforcement\namount · merchant · category · window"] -->|passes| L3
+    L2 -->|fails| R2["Reject\nover ceiling / wrong merchant /\nwrong category / outside window"]
+
+    L3["Layer 3 — Behavioral anomaly detection\n(not yet built)"] -->|clean| L4
+    L3 -->|flagged| ESC["Escalate to human review"]
+
+    L4["Layer 4 — Reasoning & audit log\nnarrates the decision, never overrides it\n(not yet built)"] --> OUT["Authorization proceeds"]
+
+    style L3 stroke-dasharray: 5 5
+    style L4 stroke-dasharray: 5 5
+```
+
+## 4. What's built, and how it works
+
+### Mandate schema and signing (`/mandate`)
+
+A cryptographically signed mandate format (`Mandate`, `MandateScope`, `SignedMandate`) encodes exactly what a human authorized:
+
+- a spending ceiling (`max_amount`)
+- allowed merchant categories, and optionally a specific merchant allowlist
+- allowed item categories
+- a valid time window (`valid_from` / `valid_until`)
+- a maximum number of times the mandate can be redeemed (`max_transaction_count`)
+
+Every mandate is signed with **Ed25519** over a deterministic, byte-exact encoding of its contents. The encoding is custom (`mandate/signing.py::canonical_bytes`), not a library's default JSON dump — field order, decimal formatting, and datetime formatting are not contractually stable across library versions, and a signature scheme that silently breaks when a dependency updates is not a signature scheme. Because the signature covers the full canonical encoding, a mandate cannot be altered after signing — inflating the spending ceiling, widening the category, extending the window — without invalidating the signature. This is verified directly by tests that tamper with a signed mandate's content and confirm the signature check fails.
+
+### Mandate verification (Layer 1)
+
+Verification checks four independent things about a presented mandate:
+
+1. Is the signature genuine, from a key registered for the claiming agent?
+2. Is the current time inside the mandate's valid window?
+3. Has the mandate expired outright (independent of the transaction window)?
+4. Has the mandate already been redeemed up to its usage budget?
+
+All four are checked and *all* failing reasons are reported — verification doesn't stop at the first failure. An audit trail can therefore say "rejected for being both expired and over-budget" rather than hiding the second reason behind the first. Budget tracking is stateful (`MandateLedger`), incremented only when a transaction is actually allowed to proceed — a transaction that gets blocked never consumes the mandate's budget, otherwise an attacker could exhaust a legitimate user's mandate purely by sending sessions the system rejects.
+
+### Scope enforcement (Layer 2)
+
+A deterministic policy engine (`detect/scope.py`) checks a session against ten named rules, split into two groups:
+
+- **Binding checks** — does the mandate presented in this session actually belong to this agent and this human (mandate ID, agent ID, and user ID must all match).
+- **Transaction scope checks** — amount within ceiling, currency match, merchant category allowed, item category allowed, merchant identity allowed (if the mandate restricts to specific merchants), and the transaction falls inside the mandate's time window.
+
+Like Layer 1, every rule that fires is collected, not just the first. And every comparison is **exact** — a `Decimal` amount is compared with `>`, not with a tolerance band, and timestamps are compared directly. A tolerance here would define a range just past the authorized limit where spending is silently permitted, which is a vulnerability, not a convenience — so there isn't one.
+
+### Rules-only baseline
+
+`detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model (once built) has to beat with statistical significance, or get dropped from the design. See [§7](#7-evaluation-results-so-far).
+
+### Feature extraction (built, not yet consumed by a model)
+
+`features/session.py` extracts a causal feature vector from each session — event timing and regularity, session composition (which lifecycle stages are present), and features relative to the agent's and mandate's own prior history (time since last use, prior session count, amount relative to the agent's running mean). Two design choices matter here:
+
+- **Causality.** Every history-relative feature only sees sessions that occurred *before* the one being featurized. A corpus-wide aggregate (e.g. an agent's mean amount computed over the whole dataset) would leak information from future sessions backward into earlier ones — a leak that looks like excellent offline performance and produces nothing useful in production.
+- **Structural label isolation.** The extractor's function signatures only accept a `SessionTrace`, never a `LabeledSession` (the wrapper that carries ground truth). This means a feature can only become a function of the label if a developer deliberately reaches into a wrapper object the extractor has no ordinary reason to touch — and there's a test that parses the module's own source as an AST and asserts it contains no reference to the label fields at all, so the guarantee doesn't rest on remembering to keep it.
+
+## 5. Synthetic data: how it's generated and why it can be trusted
+
+All data used in this project is synthetic, generated by a fully parameterized, seeded generator committed in `/generator`. Two properties make that a defensible foundation rather than just a convenient one:
+
+**Full reproducibility.** Every random decision — including which cryptographic keys get generated and which session IDs get assigned — routes through a single seeded `numpy.random.Generator`. The same `(n, seed)` pair always produces byte-identical output, verified directly by tests. A reviewer doesn't have to take any reported number on faith; they can regenerate the exact dataset that produced it from a clean clone.
+
+**Amounts grounded in reality, not invented.** Category weights and order values are loosely anchored to public 2025–2026 Indian e-commerce market data (Mordor Intelligence, IMARC, the Bain & Company/Flipkart "How India Shops Online 2025" report) rather than arbitrary numbers picked to make the data look convenient.
+
+**Legitimate traffic** simulates a population of AI agents, each with its own signing key and category preferences, transacting on behalf of a population of human users. Each session includes a full lifecycle trace (intent captured → mandate presented → catalog browsed → cart built → payment attempted → payment result) with realistic timing jitter between stages, and mandates are sometimes issued fresh and sometimes reused across multiple sessions (simulating a standing grocery-style authorization), which is also what makes mandate-replay attacks against a genuinely spent mandate meaningful rather than contrived.
+
+**Attack traffic** is built by taking the legitimate corpus as a read-only input and constructing sessions that violate it along specific, controlled dimensions — see [§6](#6-attack-taxonomy). Attack generators never mutate the legitimate corpus they're built against, and every attack generator draws from its own seeded random stream so that three generators run together don't make correlated choices that would show up as spurious structure a model could latch onto rather than learning something real.
+
+**Anti-rigging enforced structurally.** Every generated session carries its ground-truth label (`LabeledSession`) wrapped separately from the raw session data (`SessionTrace`), so passing the raw trace into a detector or feature extractor is the only thing that type-checks without deliberate effort. This is the same mechanism described in [§4](#4-whats-built-and-how-it-works) for feature extraction, applied at the generator level too.
+
+## 6. Attack taxonomy
+
+Three classes of attack are generated and used for evaluation. A fourth class is deliberately withheld from every stage of development.
+
+### 1. Mandate replay
+
+An agent presents an authorization it shouldn't be able to use again, in one of three ways:
+
+- **Expired** — the mandate lapsed hours to days ago. Caught by Layer 1's time-window check.
+- **Budget exhausted** — the mandate's transaction count is already fully consumed by legitimate use. Caught by Layer 1's ledger check, but only if the ledger has actually processed the legitimate sessions that spent it — this variant specifically tests that statefulness.
+- **Rapid reuse** — the mandate is genuine, unexpired, in-scope, and still has budget remaining. Layers 1 and 2 both pass it. The only thing wrong is the *cadence*: a reuse seconds-to-minutes behind the previous legitimate use, in a gap the legitimate generator's own minimum reuse interval never produces. This is the variant that justifies a behavioral layer existing at all.
+
+### 2. Scope violation
+
+The mandate is genuine, correctly signed, unexpired, and unspent — the agent simply spends it on something the human didn't authorize: too much money, the wrong merchant, the wrong item category, or outside the agreed time window. Layer 2 is *by construction* the oracle for this class — if the scope engine checks all six scope dimensions correctly, any violation of one of them is caught with certainty. So near-perfect recall on this class isn't a claim about the attacks being weak; it's a claim about Layer 2 being correct, and the honest way to make the class hard is to generate violations at the **boundary** rather than the extreme — amounts 0.05%–4% past the ceiling, timestamps 2–240 minutes past the window — so a sloppy or rounding-tolerant implementation of Layer 2 would fail visibly instead of scoring well on comfortable 10x overshoots.
+
+### 3. Agent impersonation
+
+A client that is not the registered agent drives a session as though it were, across a spectrum from trivially detectable to invisible to any rule:
+
+- **Unregistered key** — the impostor mints its own keypair and self-signs a plausible mandate. Caught by Layer 1: no registered key for that agent/key pair.
+- **Forged signature** — a genuine mandate is copied with an inflated scope, keeping the original signature. Caught by Layer 1's signature check.
+- **Agent binding mismatch** — a genuine, correctly signed, in-window mandate belonging to a *different* agent is presented. Every cryptographic check passes; only Layer 2's binding rule catches it.
+- **Behavioral only** — the impostor is operating a genuine agent's genuine mandate, fully in scope, in window, in budget. Nothing cryptographic or scope-related is wrong. What differs is pacing: faster, more uniform event timing than the legitimate distribution, and the catalog-browse stage is skipped more often (a scripted client that already knows what it wants). Layers 1 and 2 both pass this variant. This is the second variant, alongside rapid-reuse replay, that a rules-only system structurally cannot catch.
+
+### Held-out class: mandate chaining / privilege escalation
+
+An agent uses a legitimate small mandate to bootstrap a larger, unauthorized action. This class is **not implemented, not parameterized, and not referenced anywhere in the current codebase** — a test in the corpus builder enforces this mechanically, so the guarantee doesn't rest on memory. It will be built and evaluated exactly once, after every other design decision is finalized, specifically so it cannot be tuned against — a model that's never seen a class of attack and still performs reasonably against it is a much stronger claim than one that's been iterated against every class it's scored on.
+
+### Which layer catches which variant
+
+```mermaid
+flowchart LR
+    subgraph Replay["Mandate replay"]
+        R1["Expired"]
+        R2["Budget exhausted"]
+        R3["Rapid reuse"]
+    end
+
+    subgraph Scope["Scope violation"]
+        S1["Over ceiling / wrong merchant /\nwrong category / outside window"]
+    end
+
+    subgraph Imperson["Agent impersonation"]
+        I1["Unregistered key"]
+        I2["Forged signature"]
+        I3["Agent binding mismatch"]
+        I4["Behavioral only"]
+    end
+
+    R1 --> L1["Layer 1\nMandate verification"]
+    R2 --> L1
+    I1 --> L1
+    I2 --> L1
+
+    S1 --> L2["Layer 2\nScope enforcement"]
+    I3 --> L2
+
+    R3 --> L3["Layer 3\nBehavioral anomaly detection\n(not yet built)"]
+    I4 --> L3
+
+    style L3 stroke-dasharray: 5 5
+```
+
+Everything feeding Layer 1 or Layer 2 above is caught today. Rapid reuse and behavioral-only impersonation are the two variants with nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results-so-far) show.
+
+## 7. Evaluation results so far
+
+The rules-only baseline (Layers 1 and 2, no learned model) has been run against a corpus of 8,000 legitimate sessions plus a matching attack budget at a 4% base rate:
+
+**Overall:** precision 1.0000, recall 0.7477 (TP / FP / TN / FN = 249 / 0 / 8000 / 84)
+
+| Attack class | Recall | By variant |
+|---|---|---|
+| Mandate replay | 0.576 | `expired` 1.00 · `budget_exhausted` 1.00 · `rapid_reuse` **0.00** |
+| Scope violation | 1.000 | all five variants 1.00 |
+| Agent impersonation | 0.576 | `unregistered_key` 1.00 · `forged_signature` 1.00 · `agent_binding_mismatch` 1.00 · `behavioral_only` **0.00** |
+
+Two things about these numbers need to be said plainly rather than left implicit:
+
+**Perfect precision and perfect scope-violation recall are expected properties of a correct system, not achievements to point at.** The legitimate generator constructs every session inside its own mandate's scope by construction, so zero false positives means the generator and the scope engine agree about what a mandate's scope is — not that the detector is impressively selective. Scope-violation recall is 1.00 because Layer 2 is definitionally the oracle for that class; what actually stress-tests Layer 2 is the *margin* those violations are generated at (fractions of a percent, minutes past a window), not the recall number itself.
+
+**The number that actually matters is the 84 misses, and where they are.** Every one of them is in the two rules-invisible variants — rapid-reuse replay and behavioral-only impersonation — both sitting at exactly 0.00 recall under the rules-only baseline. That's not a flaw to fix in Layers 1 and 2; it's the precise, deliberately constructed gap that Layer 3 exists to close, and it's the empirical evidence (not just the architectural argument in §3) that a learned layer belongs in this system.
+
+A preliminary, untuned diagnostic (gradient boosting over the causal features from §4, run only against the sessions the rules baseline lets through, chronological 70/30 split) recovers a substantial fraction of that gap — while no single feature threshold gets close on its own — which is the signal that a proper behavioral model is worth building rather than being a checkbox layer. That diagnostic is not the finished Layer 3 and isn't reported here as a final metric; a real evaluation (AUC-PR with bootstrap confidence intervals, calibration, per-class breakdown, significance testing against this same rules baseline, and a false-positive-cost threshold sweep) is the standard the finished behavioral layer will be held to before any number from it is presented as a result.
+
+## 8. Why AP2, not NPCI's UAP
 
 The mandate format is modeled on **AP2 (Google's Agent Payments Protocol)**, specifically its Intent Mandate — a real, public, versioned specification (`google-agentic-commerce/AP2`, v0.2.0, April 2026) that already defines exactly the kind of bounded authorization this project needs: a signed record of spending limits, category constraints, and an expiration, produced by a user's own device.
 
-It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this writing, UAP has no published technical schema. It is publicly reported to be under active development at NPCI, built on top of UPI Circle's existing delegated-payments feature, and still awaiting RBI regulatory approval before launch. Building against a real, citable spec is a defensible engineering choice; claiming to implement UAP itself, when no public schema exists to implement, would not be. Where UAP's reported design is known — per-merchant spending limits, consent-based delegation — this project's schema follows that direction anyway, so the fit is closer than "arbitrary substitute."
+It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this writing, UAP has no published technical schema. It's publicly reported to be under active development at NPCI, built on top of UPI Circle's existing delegated-payments feature, and still awaiting RBI regulatory approval before launch. Building against a real, citable spec is a defensible engineering choice; claiming to implement UAP itself, when no public schema exists to implement, would not be. Where UAP's reported design is known — per-merchant spending limits, consent-based delegation — this project's schema follows that direction anyway, so the fit is closer than "arbitrary substitute picked for convenience."
 
-## 6. How to run this yourself
+## 9. What's not built yet, and why
+
+**Behavioral anomaly detection (Layer 3).** The feature extraction pipeline is built and tested; the model itself is not. The plan is a gradient-boosted baseline first (fast to train, hard to overfit invisibly, and a fair comparator), with a sequence model considered only if the baseline demonstrably needs it — starting with a heavier model before proving a simpler one is insufficient would be building complexity the evaluation hasn't earned yet.
+
+**Reasoning and audit layer (Layer 4).** This will consume the deterministic layers' structured output and produce a plain-language explanation of each decision — never a score, and never able to override what the deterministic layers decided. Deliberately last in the build order, because a narration layer over decisions that don't yet exist would be narrating nothing.
+
+**Full evaluation harness.** The rules-baseline numbers in §7 are real, but the complete evaluation this project is committed to — AUC-PR with bootstrap confidence intervals, calibration curves, per-attack-class breakdown, DeLong and McNemar significance tests against the rules baseline, and a full false-positive-cost threshold sweep — is not yet built. The rules baseline exists specifically so that whatever comes out of that harness for Layer 3 has something honest to be compared against.
+
+**Service and dashboard layers.** A FastAPI service and a Streamlit dashboard for interacting with the system are planned but not started; they depend on the reasoning layer existing first.
+
+## 10. Defense-only, by design
+
+This project is a **detector and verifier**, not an enforcement or offensive system, at every layer including the ones not yet built. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
+
+## 11. Known limitations, stated plainly
+
+**All data is synthetic.** Every session, mandate, and attack in this project comes from the generator in `/generator` — none of it is real transaction data. This is a genuine limitation on how far these numbers generalize, not a hidden one. The anti-rigging measures throughout this document — a held-out attack class never trained or tuned against, ground-truth labels that structurally cannot leak into features, full reproducibility from a committed seed, boundary-hard rather than extreme attack generation — exist specifically to make the resulting metrics as credible as a synthetic dataset can be, and every number this project reports is intended to be presented alongside this caveat, not around it.
+
+**The behavioral layer's real-world transfer is the biggest open question.** The rules layers (mandate verification, scope enforcement) are deterministic checks against explicit, auditable logic — they would transfer directly to real mandate and transaction data with no retraining. A learned behavioral model trained on synthetic session timing almost certainly would not transfer as cleanly, since real agent traffic will not match this generator's timing distribution exactly. This is the layer most likely to need retraining or recalibration before any production use, and that's stated here rather than left for someone else to discover.
+
+## 12. Repository structure
+
+```
+/mandate      mandate schema, Ed25519 signing, verification
+/common       shared session trace / ground-truth label types
+/generator    legitimate traffic generator, attack generators (3 of 4 classes)
+/detect       scope-enforcement rules engine, rules-only baseline
+/features     causal feature extraction for the behavioral model
+/eval         rules-baseline evaluation harness
+/reasoning    reasoning/audit layer (not yet implemented)
+/service      API service (not yet implemented)
+/dashboard    dashboard (not yet implemented)
+tests/        120 tests, covering every layer above that's built
+run_gate.py   command-line entry point for the rules-baseline evaluation
+```
+
+## 13. Running this yourself
 
 ```bash
 python3.12 -m venv .venv
@@ -80,59 +285,23 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                        # expect: 47 passed
-ruff check .                     # expect: All checks passed!
-mypy mandate common generator tests   # expect: Success: no issues found
+pytest -q                                              # expect: 120 passed
+ruff check .                                           # expect: All checks passed!
+mypy mandate common generator detect features eval tests   # expect: Success: no issues found
+python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 ```
 
 Generate a batch of synthetic sessions and inspect them directly:
 
 ```python
-from generator.legitimate import generate_legitimate_sessions
+from generator.attacks.corpus import build_evaluation_corpus
 
-out = generate_legitimate_sessions(n_sessions=500, seed=42)
-print(len(out.labeled_sessions), "sessions generated")
-print(len(out.signed_mandates), "unique mandates issued")
+corpus = build_evaluation_corpus(n_legitimate=8000, seed=42)
+print(len(corpus.labeled_sessions), "total sessions")
+print(f"{corpus.attack_base_rate:.4f}", "realized attack base rate")
 ```
 
-`requirements-lock.txt` pins the full dependency closure — not just this project's direct dependencies but every transitive one — so this reproduces the exact environment the numbers above were verified against, not "whatever the latest compatible versions happen to be today."
-
-## 7. Repository structure
-
-```
-/mandate      mandate schema, Ed25519 signing, verification         Day 1 — done
-/common       shared session trace / ground-truth label types       Day 1 — done
-/generator    legitimate traffic generator (attack classes: Day 2)  Day 1 — partial
-/features     session feature extraction for the behavioral model   Day 3-4
-/detect       scope-enforcement rules engine, behavioral model      Day 3-4
-/reasoning    LLM analyst — narrates decisions, never scores them   Day 6
-/eval         metrics, significance tests, false-positive-cost curve Day 5
-/service      FastAPI service, Dockerfile                           Day 6
-/dashboard    Streamlit dashboard                                   Day 7
-tests/        47 tests today, growing alongside every layer
-```
-
-## 8. The remaining roadmap
-
-| Day | Deliverable |
-|---|---|
-| 1 ✅ | Mandate schema, signing/verification, session trace format, legitimate traffic generator |
-| 2 | Attack generator: mandate replay, scope violation, agent impersonation — deliberately hardened, not trivially separable |
-| 3 | Feature extraction + a rules-only baseline (Layers 1+2 only). **Gate day**: if the rules baseline alone already catches everything, the attacks get hardened further before any ML is added |
-| 4 | Behavioral anomaly model (Layer 3), ensembled with the rules layer |
-| 5 | Full evaluation harness: AUC-PR with bootstrap confidence intervals, calibration, per-attack-class breakdown, DeLong and McNemar significance tests against the rules baseline, and a full false-positive-cost threshold sweep |
-| 6 | LLM reasoning/audit layer, FastAPI service, Dockerfile |
-| 7 | Streamlit dashboard, **held-out attack class (mandate chaining / privilege escalation) evaluated exactly once**, `EXCEPTIONS.md` documenting every session the system couldn't confidently classify |
-
-One attack class — mandate chaining and privilege escalation, where an agent uses a legitimate small mandate to bootstrap a larger unauthorized action — is deliberately excluded from every stage of training and tuning. It will be generated and evaluated exactly once, at the very end, and whatever degradation shows up relative to in-distribution performance will be reported as-is.
-
-## 9. Defense-only, by design
-
-This project is a **detector and verifier**, not an enforcement or offensive system, at every layer including the ones not yet built. The attack generator (Day 2) exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally. This is a stated disqualification criterion for this track, and is treated as a hard constraint throughout the build, not a checkbox added at the end.
-
-## 10. Known limitation, stated plainly
-
-All data used in this project is synthetic, produced by the generator committed in `/generator`. This is a real limitation, not a hidden one — the anti-rigging measures in Section 4 (held-out attack class, ground-truth labels that can't leak into features, full reproducibility from a committed seed) exist specifically to make the resulting metrics as credible as a synthetic dataset can be, and every number this project ultimately reports will be presented alongside that caveat rather than around it.
+`requirements-lock.txt` pins the full dependency closure — not just this project's direct dependencies but every transitive one — so this reproduces the exact environment the numbers in this document were verified against, not "whatever the latest compatible versions happen to be today."
 
 ## License
 

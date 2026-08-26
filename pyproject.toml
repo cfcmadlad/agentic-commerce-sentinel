@@ -14,6 +14,9 @@ dependencies = [
     "numpy==2.5.2",
     "scipy==1.18.1",
     "scikit-learn==1.9.0",
+    # SHAP attribution for the behavioral layer; pulls numba, pandas and
+    # cloudpickle into the closure, all pinned in requirements-lock.txt.
+    "shap==0.52.0",
 ]
 
 [project.optional-dependencies]

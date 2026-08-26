@@ -1,4 +1,4 @@
-"""Feature extraction over session traces, for the Day 4 behavioral layer.
+"""Feature extraction over session traces, for the behavioral layer.
 
 Anti-rigging enforced structurally: every function takes a `SessionTrace`,
 never a `LabeledSession`, so ground truth isn't reachable without a caller

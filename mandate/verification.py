@@ -4,7 +4,7 @@ Deliberately narrow in scope. This module answers exactly four questions:
 is the signature valid, is the mandate within its time window, is it bound
 to a registered key for the claiming agent, and has its transaction budget
 been exhausted. It does not decide whether a transaction amount, merchant,
-or category is in-scope — that is Layer 2 (`/detect`), built on Day 3, and
+or category is in-scope — that is Layer 2 (`/detect`), and
 it consumes a passing `VerificationResult` from this module as a
 precondition rather than duplicating these checks.
 """

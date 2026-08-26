@@ -14,7 +14,7 @@ Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager).
 4. [What's built, and how it works](#4-whats-built-and-how-it-works)
 5. [Synthetic data: how it's generated and why it can be trusted](#5-synthetic-data-how-its-generated-and-why-it-can-be-trusted)
 6. [Attack taxonomy](#6-attack-taxonomy)
-7. [Evaluation results so far](#7-evaluation-results-so-far)
+7. [Evaluation results](#7-evaluation-results)
 8. [Why AP2, not NPCI's UAP](#8-why-ap2-not-npcis-uap)
 9. [What's not built yet, and why](#9-whats-not-built-yet-and-why)
 10. [Defense-only, by design](#10-defense-only-by-design)
@@ -125,7 +125,7 @@ Like Layer 1, every rule that fires is collected, not just the first. And every 
 
 ### Rules-only baseline
 
-`detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model has to beat with statistical significance, or get dropped from the design entirely. See [§7](#7-evaluation-results-so-far).
+`detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model has to beat with statistical significance, or get dropped from the design entirely. See [§7](#7-evaluation-results).
 
 ### Feature extraction (`/features`)
 
@@ -143,9 +143,17 @@ Four modules, each with a narrow job:
 - **`ensemble.py`** — combines the Layer 1/2 verdict with the Layer 3 score under the one-directional rule described in [§3](#3-architecture): rules can add a block, never remove one.
 - **`attribution.py`** — SHAP feature attribution, both a global ranking (which features matter most on average) and a per-session breakdown (which features drove one specific score). The per-session breakdown is what the reasoning layer will eventually narrate from.
 
-### Significance testing (`/eval`)
+### Evaluation and significance testing (`/eval`)
 
-`eval/significance.py` implements a paired McNemar test — the correct comparison when two classifiers (rules-only baseline vs. ensemble) are scored on the *same* sessions, since their errors are paired rather than independent. `eval/milestone_a.py` runs the full pipeline end to end and reports the comparison; results are in [§7](#7-evaluation-results-so-far).
+`eval/significance.py` implements a paired McNemar test — the correct comparison when two classifiers (rules-only baseline vs. ensemble) are scored on the *same* sessions, since their errors are paired rather than independent. That is the primary significance test, because both systems are being compared as hard classifiers at a chosen operating point.
+
+`eval/delong.py` adds the corresponding test for two *correlated AUCs*, hand-rolled because no dependency here provides one: the closed-form variance estimator from DeLong, DeLong and Clarke-Pearson (1988), built from each score's placement values. It is verified in `tests/test_delong.py` against a four-row case whose structural components are computed by hand, against scikit-learn's AUC, and against a bootstrap estimate of the same standard error — not merely exercised for absence of exceptions.
+
+`eval/metrics.py` computes AUC-PR (the primary metric, since the class imbalance makes ROC insensitive to exactly the false positives that matter), AUC-ROC, the Brier score and a calibration curve, all directly in numpy for speed inside the bootstrap loop and all asserted to match scikit-learn exactly, including on tied scores. `eval/bootstrap.py` supplies stratified percentile confidence intervals, `eval/cost_sweep.py` extends the cost model in `detect/calibration.py` across the entire threshold range, `eval/latency.py` measures end-to-end per-decision latency, and `eval/sensitivity.py` regenerates and re-evaluates everything across a grid of generator parameters.
+
+`eval/milestone_a.py` reports the rules-vs-ensemble comparison; `eval/milestone_b.py` runs the complete metric set and the gate verdict. Results are in [§7](#7-evaluation-results).
+
+One structural wrinkle in comparing these two systems is documented rather than smoothed over: the rules-only baseline emits a block/allow verdict, not a ranking, and its precision is 1.0 by construction. What that means for AUC and for the gate is set out in `docs/adr/0002-comparing-a-scorer-against-a-rules-engine.md`.
 
 ## 5. Synthetic data: how it's generated and why it can be trusted
 
@@ -225,9 +233,9 @@ flowchart LR
     I4 --> L3
 ```
 
-Everything feeding Layer 1 or Layer 2 above is caught by the deterministic rules alone. Rapid reuse and behavioral-only impersonation have nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results-so-far) show, both before and after Layer 3 was added.
+Everything feeding Layer 1 or Layer 2 above is caught by the deterministic rules alone. Rapid reuse and behavioral-only impersonation have nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results) show, both before and after Layer 3 was added.
 
-## 7. Evaluation results so far
+## 7. Evaluation results
 
 ### Rules-only baseline
 
@@ -267,7 +275,63 @@ Every rules-visible variant (over-ceiling amounts, wrong merchant, wrong categor
 
 **Threshold calibration.** The reported ensemble numbers use a threshold selected to minimize expected cost under an assumed 10:1 false-negative-to-false-positive cost ratio — a stated assumption (see [§4](#4-whats-built-and-how-it-works)), not a measured one. A sensitivity sweep across cost ratios from 1:1 to 30:1 is reported alongside the chosen threshold in every run of `run_milestone_a.py`, so the dependence on that assumption is visible rather than hidden behind a single number.
 
-**What this is not yet.** This is Milestone A's result, not the complete evaluation this project is committed to. Bootstrap confidence intervals, a DeLong test, a full false-positive-cost threshold sweep (rather than one chosen point), per-decision latency, and a sensitivity analysis across generator parameters are still to come — see [§9](#9-whats-not-built-yet-and-why).
+### The full metric set
+
+Everything below comes from a single command, `python run_milestone_b.py --n-legitimate 20000 --seed 42`, against the same 20,833-session corpus and the same chronological 60/20/20 split, reported on the entire held-out test block (4,168 sessions, 411 attacks).
+
+**Ranking metrics.** AUC-PR is the primary metric, because at a 4% base rate the ROC false-positive rate divides by a legitimate-session count large enough that hundreds of wrong blocks barely move the curve, while precision divides by what the detector actually blocked. Confidence intervals are stratified bootstrap percentile intervals over 1,000 resamples.
+
+| | AUC-PR (95% CI) | AUC-ROC (95% CI) |
+|---|---|---|
+| Rules-only baseline | 0.8465 [0.8135, 0.8794] | 0.9148 [0.8966, 0.9331] |
+| Ensemble | 0.9982 [0.9965, 0.9994] | 0.9998 [0.9996, 0.9999] |
+| **Layer 3 alone, on the residual** | **0.9193 [0.8564, 0.9732]** | 0.9989 [0.9980, 0.9996] |
+
+Three things about this table need saying rather than leaving to be noticed. **The baseline's AUCs are balanced accuracy, not a ranking.** It emits a block/allow verdict; there is no ordering within either group because a rules engine has one operating point by construction. **The ensemble's 0.9982 is largely inherited, not learned** — the deterministic layers already resolve most of the population perfectly, and an AUC over the full block credits Layer 3 with separation Layers 1 and 2 performed. **The row that actually characterises the model is the third**, computed on the rules-allowed residual alone: AUC-PR 0.9193, with an interval nearly forty times wider than the ensemble's, because that population contains few attacks. That is the honest figure for what Layer 3 learned.
+
+**Calibration.** Brier score 0.00499, expected calibration error 0.00532, over the test block's residual. The reliability diagram is dominated by a single well-calibrated bin near zero (3,752 rows, predicted 0.0001 against an observed 0.0011); the sparse middle bins each hold under ten rows and their gaps should be read as noise, not as systematic miscalibration.
+
+**Significance.** Paired McNemar at the operating threshold is the primary test, since both systems are being compared as hard classifiers on identical sessions: 69 sessions the ensemble alone got right against 9 the baseline alone did, p ≈ 1.4 × 10⁻¹². A hand-rolled DeLong test on the correlated AUCs agrees (difference +0.0850, SE 0.00926, p ≈ 4.6 × 10⁻²⁰) but is reported as a secondary, low-resolution check for the reason above. Its implementation is verified against a hand-computed reference case, against scikit-learn, and against a bootstrap estimate of the same standard error — see `docs/adr/0002-comparing-a-scorer-against-a-rules-engine.md`.
+
+**Cost across the full threshold range.** Reported in false-positive-cost units, deliberately not converted to rupees: that conversion needs an assumed cost per manual review and an assumed loss per wrongly blocked basket, neither of which this project has measured, and two invented constants would make the figure look more precise than the evidence behind it. The unit-free form carries exactly one assumption — the 10:1 false-negative-to-false-positive ratio named in [§4](#4-whats-built-and-how-it-works) — and the sweep varies it rather than fixing it. Raw per-10,000-session error rates are reported alongside so a reader with real figures can do the conversion with their own numbers.
+
+| Threshold | Precision | Recall | Blocked legitimate /10k | Missed attacks /10k |
+|---|---|---|---|---|
+| 0.000 | 0.0986 | 1.0000 | 9013.9 | 0.0 |
+| 0.022 | 0.9785 | 0.9976 | 21.6 | 2.4 |
+| 0.200 | 0.9805 | 0.9805 | 19.2 | 19.2 |
+| 0.500 | 0.9824 | 0.9489 | 16.8 | 50.4 |
+| 0.900 | 0.9919 | 0.8978 | 7.2 | 100.8 |
+| 1.000 | 1.0000 | 0.8297 | 0.0 | 167.9 |
+
+The cost-minimising threshold moves from 0.0220 at a 1:1 ratio to 0.0060 at 10:1 and stays there through 30:1 — the basin is broad, so the operating point is not delicately balanced on the exact cost assumption.
+
+**Latency.** End-to-end per decision — mandate resolution, Layer 1, Layer 2, feature extraction, Layer 3 scoring, ensemble combination — over 2,950 timed decisions after a 50-session warm-up: **p50 2.61 ms, p95 3.27 ms, p99 4.10 ms** (min 1.79, max 8.68). Reported as a distribution rather than a mean, because the p99 is what breaches a timeout. These are pure-Python, single-threaded, in-process figures against an in-memory mandate resolver; a real deployment adds network hops and a real mandate store, so treat them as a floor rather than a prediction.
+
+### Sensitivity to the generator's own parameters, including where it fails
+
+Every number above is conditional on the parameters that generated the traffic. To measure how conditional, the corpus is regenerated, Layer 3 retrained and everything re-evaluated at thirteen grid points — one factor at a time, three levels each, at the same 20,000-session corpus size as the headline so the numbers are directly comparable.
+
+| Grid point | AUC-PR | Δ | Ensemble recall | Rules-invisible recall | Beats baseline |
+|---|---|---|---|---|---|
+| *established setting* | 0.9982 | — | 0.9976 | 0.9859 | yes |
+| `amount_median` ×0.5 / ×2 | 0.9982 | +0.0000 | 0.9976 | 0.9859 | yes |
+| `amount_sigma` ×0.7 / ×1.4 | 0.9983 / 0.9982 | ~0 | 0.9951 / 0.9976 | 0.9718 / 0.9859 | yes |
+| `rapid_reuse` weight 0.2 / 0.6 | 0.9984 / 0.9986 | +0.000 | 0.9724 / 0.9648 | 0.8154 / 0.8391 | yes |
+| `behavioral_only` weight 0.25 | 0.9898 | −0.0085 | 0.9659 | 0.7143 | yes |
+| `behavioral_only` weight 0.65 | 0.9971 | −0.0012 | 0.9950 | 0.9785 | yes |
+| `scripted_pacing` max 10s | 1.0000 | +0.0018 | 1.0000 | 1.0000 | yes |
+| **`scripted_pacing` max 35s** | **0.9796** | **−0.0186** | **0.9148** | **0.5070** | **no** |
+| `skip_browse` p=0.1 | 0.9936 | −0.0046 | 0.9746 | 0.8305 | yes |
+| `skip_browse` p=0.6 | 0.9981 | −0.0001 | 1.0000 | 1.0000 | yes |
+
+**The ensemble does not beat the baseline at every grid point, and the failure is not a rounding artifact.** At `scripted_pacing_max35` — scripted-client inter-event pacing widened from 20s to 35s, so it sits almost entirely inside the legitimate 2–45s jitter range — recall on the two rules-invisible variants **collapses from 0.9859 to 0.5070**, and Layer 3 no longer significantly outperforms the rules-only baseline. Layer 3 catches roughly half of what it exists to catch at that setting.
+
+This is the same lever `docs/adr/0001-attack-variant-hardness.md` already records a decision about: pacing was widened from 6s to 20s specifically to stop the model reconstructing a single timing threshold. Pushing it to 35s shows how much of the headline result still rests on scripted pacing being distinguishable at all. **It is reported here rather than tuned away, and the grid point was chosen before the result was known, not after.**
+
+Two further observations worth stating because they cut against the headline. **AUC-PR badly understates this fragility** — it moves only 0.0186 while rules-invisible recall halves, because AUC-PR over the full test block is dominated by the deterministic layers; the rules-invisible recall column is the one that reveals it. And **the one-factor-at-a-time design cannot see interactions**: it isolates which single assumption the result is most fragile to, which is the question a reviewer asks, but two parameters moving together could be worse than either alone and this grid would not show it.
+
+**What this means for the result.** The headline holds at the established setting and across eleven of twelve perturbations, including both amount-distribution factors, which move it essentially not at all. It does not hold universally. The honest summary is that Layer 3's value is real and statistically well supported at the parameters this project generates against, and is materially sensitive to one of them — scripted-client pacing — in a way that would need re-measuring against real agent traffic before anyone relied on it.
 
 ## 8. Why AP2, not NPCI's UAP
 
@@ -276,8 +340,6 @@ The mandate format is modeled on **AP2 (Google's Agent Payments Protocol)**, spe
 It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this writing, UAP has no published technical schema. It's publicly reported to be under active development at NPCI, built on top of UPI Circle's existing delegated-payments feature, and still awaiting RBI regulatory approval before launch. Building against a real, citable spec is a defensible engineering choice; claiming to implement UAP itself, when no public schema exists to implement, would not be. Where UAP's reported design is known — per-merchant spending limits, consent-based delegation — this project's schema follows that direction anyway, so the fit is closer than "arbitrary substitute picked for convenience."
 
 ## 9. What's not built yet, and why
-
-**Full evaluation harness.** Milestone A's numbers in §7 are real and independently checked for leakage, but the complete evaluation this project is committed to — bootstrap confidence intervals, a DeLong test, calibration curves and Brier score, a full false-positive-cost threshold sweep across the entire range (not one chosen point), end-to-end decision latency as a p50/p95/p99 distribution, and a sensitivity analysis across a grid of generator parameters — is not yet built. This is the next milestone in progress.
 
 **Held-out attack class (mandate chaining).** Deliberately untouched, per [§6](#6-attack-taxonomy) — will be generated in a separate context with no detector visibility and evaluated exactly once, after Milestones A and B are both frozen.
 
@@ -293,7 +355,9 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 
 **All data is synthetic.** Every session, mandate, and attack in this project comes from the generator in `/generator` — none of it is real transaction data. This is a genuine limitation on how far these numbers generalize, not a hidden one. The anti-rigging measures throughout this document — a held-out attack class never trained or tuned against, ground-truth labels that structurally cannot leak into features, full reproducibility from a committed seed, boundary-hard rather than extreme attack generation, and the leak-check discipline described in §7 — exist specifically to make the resulting metrics as credible as a synthetic dataset can be, and every number this project reports is intended to be presented alongside this caveat, not around it.
 
-**The behavioral layer's real-world transfer is the biggest open question.** The rules layers (mandate verification, scope enforcement) are deterministic checks against explicit, auditable logic — they would transfer directly to real mandate and transaction data with no retraining. Layer 3, now built, is trained entirely on synthetic session timing; real agent traffic will not match this generator's timing distribution exactly, and the model's strong performance in §7 is a claim about this synthetic distribution, not a guarantee about production traffic. This is the layer most likely to need retraining or recalibration before any real use, and that's stated here rather than left for someone else to discover. A cost-ratio assumption drives the operating threshold (§4, §7) and is likewise stated rather than presented as measured fact.
+**The behavioral layer's real-world transfer is the biggest open question, and the sensitivity analysis puts a number on it.** The rules layers (mandate verification, scope enforcement) are deterministic checks against explicit, auditable logic — they would transfer directly to real mandate and transaction data with no retraining. Layer 3 is trained entirely on synthetic session timing, and [§7](#7-evaluation-results) shows exactly how much that matters: widening scripted-client pacing to sit inside the legitimate jitter range halves recall on the two variants Layer 3 exists to catch, and at that setting it no longer significantly beats the rules-only baseline. Real agent traffic will not match this generator's timing distribution, so that is not a hypothetical failure mode — it is the most likely one. This is the layer most in need of retraining and recalibration before any real use, and the evaluation reports where it breaks rather than only where it works.
+
+**Two assumptions drive reported numbers and neither is measured.** The 10:1 false-negative-to-false-positive cost ratio sets the operating threshold (§4, §7); the cost sweep varies it from 1:1 to 30:1 so its leverage is visible rather than hidden. And the sensitivity grid varies one factor at a time, so it isolates which single parameter the result is most fragile to but cannot see interactions between two moving together.
 
 ## 12. Repository structure
 
@@ -304,15 +368,26 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 /detect       scope-enforcement rules engine, rules-only baseline,
               behavioral model, calibration, ensemble, SHAP attribution
 /features     causal feature extraction for the behavioral model
-/eval         rules-baseline and Milestone A evaluation harnesses,
-              paired significance testing
+/eval         evaluation harnesses and the full metric set:
+                gate.py         rules-only baseline report
+                pipeline.py     one shared fit of the whole detection stack
+                metrics.py      AUC-PR, AUC-ROC, Brier, calibration curve
+                bootstrap.py    stratified bootstrap confidence intervals
+                delong.py       DeLong test for two correlated AUCs
+                significance.py paired McNemar test
+                cost_sweep.py   full-range false-positive cost sweep
+                latency.py      end-to-end per-decision latency percentiles
+                sensitivity.py  generator-parameter robustness grid
+                milestone_a.py  Layer 3 vs baseline comparison
+                milestone_b.py  the complete evaluation and its gate verdict
 /reasoning    reasoning/audit layer (not yet implemented)
 /service      API service (not yet implemented)
 /frontend     web frontend (not yet implemented)
 /docs/adr     architecture decision records
-tests/        168 tests, covering every layer above that's built
+tests/        316 tests, covering every layer above that's built
 run_gate.py         command-line entry point for the rules-baseline evaluation
 run_milestone_a.py  command-line entry point for the Layer 3 pipeline
+run_milestone_b.py  command-line entry point for the full evaluation
 ```
 
 ## 13. Running this yourself
@@ -323,12 +398,15 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 168 passed
+pytest -q                                              # expect: 316 passed
 ruff check .                                           # expect: All checks passed!
 mypy mandate common generator detect features eval tests   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 python run_milestone_a.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
+python run_milestone_b.py --n-legitimate 20000 --seed 42   # the full evaluation
 ```
+
+`run_milestone_b.py` is the one that produces every number in [§7](#7-evaluation-results). It takes several minutes, most of it in the sensitivity grid, which regenerates the corpus and retrains the model thirteen times over. `--skip-sensitivity` cuts that for iteration and prints a warning saying the resulting report is incomplete.
 
 Generate a batch of synthetic sessions and inspect them directly:
 

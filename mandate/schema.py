@@ -96,9 +96,9 @@ class Mandate(BaseModel):
         user_id: Identity of the human principal granting authority.
         parent_mandate_id: If this mandate was derived from a broader
             mandate (delegation / chaining), the parent's ID. None for a
-            root mandate signed directly by the user. Present from Day 1
+            root mandate signed directly by the user. Present from the
             even though the chaining detector (Section 3, held-out class)
-            isn't built until Day 7, because retrofitting this field later
+            first schema version, because retrofitting this field later
             would touch every downstream consumer of `Mandate`.
         issued_at: UTC time the mandate was signed.
         expires_at: UTC time after which the mandate is void outright,

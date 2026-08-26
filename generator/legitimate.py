@@ -25,25 +25,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from common.schema import AttackClass, LabeledSession, SessionEvent, SessionTrace
 from generator.config import (
-    AGENT_POOL_SIZE,
-    CATEGORY_CONFIGS,
-    CURRENCY,
-    GENERATION_ANCHOR,
-    MAX_AMOUNT_MULTIPLE_OF_MEDIAN,
-    MAX_EVENT_GAP_SECONDS,
-    MAX_MANDATE_LIFETIME_DAYS,
-    MAX_MANDATE_TRANSACTION_COUNT,
-    MAX_SCOPE_CEILING_MULTIPLE,
-    MIN_AMOUNT_MULTIPLE_OF_MEDIAN,
-    MIN_EVENT_GAP_SECONDS,
-    MIN_MANDATE_LIFETIME_DAYS,
-    MIN_MANDATE_TRANSACTION_COUNT,
-    MIN_RECURRING_REUSE_GAP_HOURS,
-    MIN_SCOPE_CEILING_MULTIPLE,
-    RECURRING_MANDATE_PROBABILITY,
-    SESSION_HORIZON_DAYS,
+    DEFAULT_GENERATOR_CONFIG,
     CategoryConfig,
-    compute_params_digest,
+    GeneratorConfig,
 )
 from generator.events import LEGITIMATE_LIFECYCLE, build_events
 from generator.rng import rng_nonce, rng_uuid
@@ -52,18 +36,6 @@ from mandate.signing import key_id_for_public_key, keypair_from_seed_bytes, sign
 from mandate.verification import AgentKeyRegistry, MandateLedger
 
 AMOUNT_QUANTIZE = Decimal("0.01")
-
-# Probability an agent's category preferences are a single category rather
-# than two. Most real deployed agents are single-purpose.
-SINGLE_CATEGORY_PROBABILITY = 0.7
-
-# Probability a freshly issued mandate is pinned to one specific merchant
-# rather than to its whole category.
-SINGLE_MERCHANT_SCOPE_PROBABILITY = 0.5
-
-# Fraction of a reused mandate's remaining ceiling a session may consume, so
-# a legitimate reuse sits inside budget with margin rather than at the edge.
-REUSE_CEILING_HEADROOM = 0.98
 
 # Bytes of seed material required to derive one Ed25519 private key.
 ED25519_SEED_BYTES = 32
@@ -107,6 +79,10 @@ class LegitimateGeneratorOutput:
             could trivially separate on agent_id alone.
         seed: The seed used, for reproducibility.
         params_digest: Digest of the generator parameters in effect.
+        config: The parameter set this run was produced under, carried so the
+            attack generators build against the same distributions and the
+            sensitivity analysis can report which grid point a corpus came
+            from without re-deriving it.
     """
 
     labeled_sessions: tuple[LabeledSession, ...]
@@ -116,36 +92,38 @@ class LegitimateGeneratorOutput:
     agents: tuple[AgentProfile, ...]
     seed: int
     params_digest: str
+    config: GeneratorConfig
 
 
 def _build_agent_pool(
-    rng: np.random.Generator, registry: AgentKeyRegistry
+    rng: np.random.Generator, registry: AgentKeyRegistry, config: GeneratorConfig
 ) -> list[AgentProfile]:
     """Builds the simulated agent population and registers their keys.
 
     Args:
         rng: Seeded random generator.
         registry: Registry to populate with each agent's public key.
+        config: Generator parameters in effect.
 
     Returns:
         The agent pool.
     """
     agents: list[AgentProfile] = []
-    for i in range(AGENT_POOL_SIZE):
+    for i in range(config.agent_pool_size):
         private_key, public_key = keypair_from_seed_bytes(rng.bytes(ED25519_SEED_BYTES))
         agent_id = f"agent-{i:03d}"
         key_id = key_id_for_public_key(public_key)
         registry.register(agent_id, key_id, public_key)
 
-        num_categories = 1 if rng.random() < SINGLE_CATEGORY_PROBABILITY else 2
+        num_categories = 1 if rng.random() < config.single_category_probability else 2
         chosen = rng.choice(
-            np.array(CATEGORY_CONFIGS, dtype=object), size=num_categories, replace=False
+            np.array(config.categories, dtype=object), size=num_categories, replace=False
         )
         agents.append(
             AgentProfile(
                 agent_id=agent_id,
                 private_key=private_key,
-                home_user_id=f"user-{rng.integers(0, 500):04d}",
+                home_user_id=f"user-{rng.integers(0, config.user_pool_size):04d}",
                 preferred_categories=tuple(chosen),
             )
         )
@@ -169,7 +147,10 @@ def _pick_category(rng: np.random.Generator, agent: AgentProfile) -> CategoryCon
 
 
 def sample_amount(
-    rng: np.random.Generator, category: CategoryConfig, ceiling: Decimal | None = None
+    rng: np.random.Generator,
+    category: CategoryConfig,
+    ceiling: Decimal | None = None,
+    config: GeneratorConfig = DEFAULT_GENERATOR_CONFIG,
 ) -> Decimal:
     """Samples a transaction amount for a category from a clipped log-normal.
 
@@ -181,22 +162,28 @@ def sample_amount(
         rng: Seeded random generator.
         category: The category whose median/sigma parameterize the draw.
         ceiling: If given, the amount is capped just below this value.
+        config: Generator parameters supplying the clip bounds and reuse
+            headroom.
 
     Returns:
         A positive amount, quantized to 2 decimal places.
     """
     median = float(category.amount_median)
     draw = rng.lognormal(mean=np.log(median), sigma=category.amount_sigma)
-    low = median * MIN_AMOUNT_MULTIPLE_OF_MEDIAN
-    high = median * MAX_AMOUNT_MULTIPLE_OF_MEDIAN
+    low = median * config.min_amount_multiple_of_median
+    high = median * config.max_amount_multiple_of_median
     draw = float(np.clip(draw, low, high))
     if ceiling is not None:
-        draw = min(draw, float(ceiling) * REUSE_CEILING_HEADROOM)
+        draw = min(draw, float(ceiling) * config.reuse_ceiling_headroom)
     return Decimal(str(round(draw, 2))).quantize(AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP)
 
 
 def _issue_mandate(
-    rng: np.random.Generator, agent: AgentProfile, category: CategoryConfig, issued_at: datetime
+    rng: np.random.Generator,
+    agent: AgentProfile,
+    category: CategoryConfig,
+    issued_at: datetime,
+    config: GeneratorConfig,
 ) -> tuple[SignedMandate, Decimal]:
     """Issues and signs a fresh mandate scoped to one category for an agent.
 
@@ -205,6 +192,7 @@ def _issue_mandate(
         agent: The agent this mandate authorizes.
         category: The merchant category the mandate is scoped to.
         issued_at: When the mandate is signed.
+        config: Generator parameters in effect.
 
     Returns:
         A tuple of (signed mandate, the transaction amount this mandate's
@@ -212,16 +200,20 @@ def _issue_mandate(
         the session that triggers issuance rather than sampling a new one - a
         second independent draw is not guaranteed to fall under the ceiling.
     """
-    base_amount = sample_amount(rng, category)
-    ceiling_multiple = rng.uniform(MIN_SCOPE_CEILING_MULTIPLE, MAX_SCOPE_CEILING_MULTIPLE)
+    base_amount = sample_amount(rng, category, config=config)
+    ceiling_multiple = rng.uniform(
+        config.min_scope_ceiling_multiple, config.max_scope_ceiling_multiple
+    )
     max_amount = (base_amount * Decimal(str(ceiling_multiple))).quantize(
         AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP
     )
 
-    lifetime_days = int(rng.integers(MIN_MANDATE_LIFETIME_DAYS, MAX_MANDATE_LIFETIME_DAYS + 1))
+    lifetime_days = int(
+        rng.integers(config.min_mandate_lifetime_days, config.max_mandate_lifetime_days + 1)
+    )
     valid_until = issued_at + timedelta(days=lifetime_days)
 
-    restrict_to_single_merchant = rng.random() < SINGLE_MERCHANT_SCOPE_PROBABILITY
+    restrict_to_single_merchant = rng.random() < config.single_merchant_scope_probability
     allowed_merchant_ids = (
         frozenset({str(rng.choice(np.array(category.merchant_ids)))})
         if restrict_to_single_merchant
@@ -230,14 +222,16 @@ def _issue_mandate(
 
     scope = MandateScope(
         max_amount=max_amount,
-        currency=CURRENCY,
+        currency=config.currency,
         allowed_merchant_ids=allowed_merchant_ids,
         allowed_merchant_categories=frozenset({category.name}),
         allowed_item_categories=frozenset(category.item_categories),
         valid_from=issued_at,
         valid_until=valid_until,
         max_transaction_count=int(
-            rng.integers(MIN_MANDATE_TRANSACTION_COUNT, MAX_MANDATE_TRANSACTION_COUNT + 1)
+            rng.integers(
+                config.min_mandate_transaction_count, config.max_mandate_transaction_count + 1
+            )
         ),
     )
     key_id = key_id_for_public_key(agent.private_key.public_key())
@@ -256,13 +250,14 @@ def _issue_mandate(
 
 
 def _build_events(
-    rng: np.random.Generator, started_at: datetime
+    rng: np.random.Generator, started_at: datetime, config: GeneratorConfig
 ) -> tuple[list[SessionEvent], datetime]:
     """Builds a realistic legitimate event sequence for one session.
 
     Args:
         rng: Seeded random generator.
         started_at: Timestamp of the first event.
+        config: Generator parameters supplying the inter-event jitter bounds.
 
     Returns:
         A tuple of (events, completed_at).
@@ -271,18 +266,23 @@ def _build_events(
         rng,
         started_at,
         LEGITIMATE_LIFECYCLE,
-        MIN_EVENT_GAP_SECONDS,
-        MAX_EVENT_GAP_SECONDS,
+        config.min_event_gap_seconds,
+        config.max_event_gap_seconds,
     )
 
 
-def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGeneratorOutput:
+def generate_legitimate_sessions(
+    n_sessions: int, seed: int, config: GeneratorConfig = DEFAULT_GENERATOR_CONFIG
+) -> LegitimateGeneratorOutput:
     """Generates a batch of synthetic legitimate agent sessions.
 
     Args:
         n_sessions: Number of sessions to generate. Must be positive.
         seed: Seed for the internal random generator; the same seed always
             produces the same output.
+        config: Generator parameters. The default reproduces the parameter
+            set every reported headline number was measured under; the
+            sensitivity analysis passes perturbed instances.
 
     Returns:
         The generated sessions plus the supporting registry, ledger and agent
@@ -301,37 +301,41 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
     standing_mandate: dict[str, SignedMandate] = {}
     last_used_at: dict[UUID, datetime] = {}
 
-    agents = _build_agent_pool(rng, registry)
-    horizon_start = GENERATION_ANCHOR - timedelta(days=SESSION_HORIZON_DAYS)
+    agents = _build_agent_pool(rng, registry, config)
+    horizon_start = config.generation_anchor - timedelta(days=config.session_horizon_days)
 
     labeled_sessions: list[LabeledSession] = []
-    params_digest = compute_params_digest()
+    params_digest = config.params_digest()
 
     for _ in range(n_sessions):
         agent = agents[rng.integers(0, len(agents))]
-        offset_seconds = rng.uniform(0, SESSION_HORIZON_DAYS * 24 * 3600)
+        offset_seconds = rng.uniform(0, config.session_horizon_days * 24 * 3600)
         session_start = horizon_start + timedelta(seconds=float(offset_seconds))
 
         existing = standing_mandate.get(agent.agent_id)
         can_reuse = (
             existing is not None
-            and rng.random() < RECURRING_MANDATE_PROBABILITY
+            and rng.random() < config.recurring_mandate_probability
             and ledger.usage_count(existing.mandate.mandate_id)
             < existing.mandate.scope.max_transaction_count
             and session_start
             >= last_used_at.get(existing.mandate.mandate_id, existing.mandate.issued_at)
-            + timedelta(hours=MIN_RECURRING_REUSE_GAP_HOURS)
+            + timedelta(hours=config.min_recurring_reuse_gap_hours)
             and session_start <= existing.mandate.scope.valid_until
         )
 
         if can_reuse and existing is not None:
             signed = existing
             category_name = next(iter(signed.mandate.scope.allowed_merchant_categories))
-            category = next(c for c in CATEGORY_CONFIGS if c.name == category_name)
-            amount = sample_amount(rng, category, ceiling=signed.mandate.scope.max_amount)
+            category = next(c for c in config.categories if c.name == category_name)
+            amount = sample_amount(
+                rng, category, ceiling=signed.mandate.scope.max_amount, config=config
+            )
         else:
             category = _pick_category(rng, agent)
-            signed, amount = _issue_mandate(rng, agent, category, issued_at=session_start)
+            signed, amount = _issue_mandate(
+                rng, agent, category, issued_at=session_start, config=config
+            )
             signed_mandates[signed.mandate.mandate_id] = signed
             standing_mandate[agent.agent_id] = signed
 
@@ -343,7 +347,7 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
         )
         item_category = str(rng.choice(np.array(category.item_categories)))
 
-        events, completed_at = _build_events(rng, session_start)
+        events, completed_at = _build_events(rng, session_start, config)
         trace = SessionTrace(
             session_id=rng_uuid(rng),
             agent_id=agent.agent_id,
@@ -353,7 +357,7 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
             merchant_category=category.name,
             item_category=item_category,
             amount=amount,
-            currency=CURRENCY,
+            currency=config.currency,
             events=events,
             started_at=session_start,
             completed_at=completed_at,
@@ -381,4 +385,5 @@ def generate_legitimate_sessions(n_sessions: int, seed: int) -> LegitimateGenera
         agents=tuple(agents),
         seed=seed,
         params_digest=params_digest,
+        config=config,
     )

@@ -1,1 +1,1 @@
-"""Session feature extraction for the behavioral model (Day 3-4)."""
+"""Session feature extraction for the behavioral model."""

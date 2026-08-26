@@ -1,1 +1,1 @@
-"""LLM reasoning and audit layer: decision narration only, never scoring (Day 6)."""
+"""LLM reasoning and audit layer: decision narration only, never scoring."""

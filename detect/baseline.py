@@ -1,8 +1,8 @@
 """The rules-only baseline: Layer 1 plus Layer 2, no machine learning.
 
-This is the number every later model has to beat — if the Day 4 behavioral
-model doesn't improve on it with statistical significance, the model gets
-dropped and that gets reported.
+This is the number every later model has to beat — if the behavioral model
+doesn't improve on it with statistical significance, the model gets dropped
+and that gets reported.
 
 Two properties keep this a fair comparator rather than a strawman:
 
@@ -14,8 +14,8 @@ Two properties keep this a fair comparator rather than a strawman:
   otherwise a flood of rejected sessions could exhaust a legitimate user's
   budget.
 
-Emits a hard verdict, not a score. Threshold sweeps arrive with the Day 5
-scored ensemble; a rules engine has one operating point by construction.
+Emits a hard verdict, not a score. Threshold sweeps belong to the scored
+ensemble; a rules engine has one operating point by construction.
 """
 
 from __future__ import annotations

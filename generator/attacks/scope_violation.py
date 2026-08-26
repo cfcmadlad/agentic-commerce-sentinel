@@ -32,23 +32,16 @@ import numpy as np
 
 from common.schema import AttackClass, SessionTrace
 from generator.attack_config import (
-    MAX_CEILING_OVERSHOOT,
-    MAX_WINDOW_OVERSHOOT_MINUTES,
-    MIN_CEILING_OVERSHOOT,
-    MIN_WINDOW_OVERSHOOT_MINUTES,
-    SCOPE_MIX_AMOUNT_OVER_CEILING,
-    SCOPE_MIX_CATEGORY_MISMATCH,
-    SCOPE_MIX_ITEM_CATEGORY_MISMATCH,
-    SCOPE_MIX_MERCHANT_NOT_ALLOWED,
-    SCOPE_MIX_WINDOW_EDGE,
+    DEFAULT_ATTACK_CONFIG,
+    VARIANT_AMOUNT_OVER_CEILING,
+    VARIANT_CATEGORY_MISMATCH,
+    VARIANT_ITEM_CATEGORY_MISMATCH,
+    VARIANT_MERCHANT_NOT_ALLOWED,
+    VARIANT_WINDOW_EDGE,
+    AttackConfig,
 )
 from generator.attacks.common import AttackWorld, GeneratedAttack, label_attack, pick_weighted
-from generator.config import (
-    CATEGORY_CONFIGS,
-    MAX_EVENT_GAP_SECONDS,
-    MIN_EVENT_GAP_SECONDS,
-    CategoryConfig,
-)
+from generator.config import CategoryConfig, GeneratorConfig
 from generator.events import LEGITIMATE_LIFECYCLE, build_events
 from generator.legitimate import AMOUNT_QUANTIZE, sample_amount
 from generator.rng import rng_uuid
@@ -56,19 +49,29 @@ from mandate.schema import SignedMandate
 
 logger = logging.getLogger(__name__)
 
-VARIANT_AMOUNT_OVER_CEILING = "amount_over_ceiling"
-VARIANT_MERCHANT_NOT_ALLOWED = "merchant_not_allowed"
-VARIANT_CATEGORY_MISMATCH = "category_mismatch"
-VARIANT_ITEM_CATEGORY_MISMATCH = "item_category_mismatch"
-VARIANT_WINDOW_EDGE = "window_edge"
+# Variant names are re-exported from the attack config, which owns them, so a
+# rename cannot leave the weights and the generator disagreeing.
+__all__ = [
+    "VARIANT_AMOUNT_OVER_CEILING",
+    "VARIANT_CATEGORY_MISMATCH",
+    "VARIANT_ITEM_CATEGORY_MISMATCH",
+    "VARIANT_MERCHANT_NOT_ALLOWED",
+    "VARIANT_WINDOW_EDGE",
+    "generate_scope_violation_attacks",
+]
 
-_VARIANT_WEIGHTS = {
-    VARIANT_AMOUNT_OVER_CEILING: SCOPE_MIX_AMOUNT_OVER_CEILING,
-    VARIANT_MERCHANT_NOT_ALLOWED: SCOPE_MIX_MERCHANT_NOT_ALLOWED,
-    VARIANT_CATEGORY_MISMATCH: SCOPE_MIX_CATEGORY_MISMATCH,
-    VARIANT_ITEM_CATEGORY_MISMATCH: SCOPE_MIX_ITEM_CATEGORY_MISMATCH,
-    VARIANT_WINDOW_EDGE: SCOPE_MIX_WINDOW_EDGE,
-}
+# Validity of a variant name is a property of the taxonomy, not of the weights
+# a particular config assigns: a config may legitimately zero a variant's
+# weight, and that must not make the name itself unknown.
+_KNOWN_VARIANTS: frozenset[str] = frozenset(
+    {
+        VARIANT_AMOUNT_OVER_CEILING,
+        VARIANT_MERCHANT_NOT_ALLOWED,
+        VARIANT_CATEGORY_MISMATCH,
+        VARIANT_ITEM_CATEGORY_MISMATCH,
+        VARIANT_WINDOW_EDGE,
+    }
+)
 
 
 def _has_budget_headroom(world: AttackWorld, signed: SignedMandate) -> bool:
@@ -103,7 +106,7 @@ def _eligible_mandates(world: AttackWorld, variant: str) -> list[SignedMandate]:
     Raises:
         ValueError: If `variant` is not a known variant.
     """
-    if variant not in _VARIANT_WEIGHTS:
+    if variant not in _KNOWN_VARIANTS:
         raise ValueError(f"unknown scope-violation variant {variant!r}")
 
     mandates = [
@@ -116,11 +119,13 @@ def _eligible_mandates(world: AttackWorld, variant: str) -> list[SignedMandate]:
         # violated on merchant identity; a category-scoped mandate cannot.
         return [s for s in mandates if s.mandate.scope.allowed_merchant_ids is not None]
     if variant == VARIANT_ITEM_CATEGORY_MISMATCH:
-        return [s for s in mandates if _out_of_scope_item_categories(s)]
+        return [s for s in mandates if _out_of_scope_item_categories(s, world.output.config)]
     return mandates
 
 
-def _out_of_scope_item_categories(signed: SignedMandate) -> tuple[str, ...]:
+def _out_of_scope_item_categories(
+    signed: SignedMandate, generator_config: GeneratorConfig
+) -> tuple[str, ...]:
     """Lists item categories that exist in the catalog but not in this scope.
 
     Sorted for determinism: iterating a set would make the choice depend on
@@ -128,19 +133,23 @@ def _out_of_scope_item_categories(signed: SignedMandate) -> tuple[str, ...]:
 
     Args:
         signed: The mandate whose scope is being violated.
+        generator_config: Generator parameters supplying the item catalog.
 
     Returns:
         Out-of-scope item category labels, sorted.
     """
-    catalog = {item for category in CATEGORY_CONFIGS for item in category.item_categories}
+    catalog = {
+        item for category in generator_config.categories for item in category.item_categories
+    }
     return tuple(sorted(catalog - set(signed.mandate.scope.allowed_item_categories)))
 
 
-def _category_for_name(name: str) -> CategoryConfig:
+def _category_for_name(name: str, generator_config: GeneratorConfig) -> CategoryConfig:
     """Resolves a merchant category label to its config.
 
     Args:
         name: The merchant category label.
+        generator_config: Generator parameters supplying the category catalog.
 
     Returns:
         The matching `CategoryConfig`.
@@ -149,7 +158,7 @@ def _category_for_name(name: str) -> CategoryConfig:
         KeyError: If the label is not in the configured catalog, which would
             mean the mandate and the generator config have drifted apart.
     """
-    for category in CATEGORY_CONFIGS:
+    for category in generator_config.categories:
         if category.name == name:
             return category
     raise KeyError(f"merchant category {name!r} is not in the generator catalog")
@@ -160,6 +169,7 @@ def _build_violation_trace(
     world: AttackWorld,
     signed: SignedMandate,
     variant: str,
+    config: AttackConfig,
 ) -> SessionTrace:
     """Builds one session that violates exactly one dimension of a mandate's scope.
 
@@ -177,6 +187,7 @@ def _build_violation_trace(
         world: The indexed legitimate corpus.
         signed: The mandate being violated.
         variant: One of the module's VARIANT_* constants.
+        config: Attack parameters supplying the overshoot bounds.
 
     Returns:
         The synthetic session trace.
@@ -186,9 +197,10 @@ def _build_violation_trace(
     """
     mandate = signed.mandate
     scope = mandate.scope
+    generator_config = world.output.config
     donor_sessions = world.session_by_mandate[mandate.mandate_id]
     donor = donor_sessions[int(rng.integers(0, len(donor_sessions)))]
-    home_category = _category_for_name(donor.merchant_category)
+    home_category = _category_for_name(donor.merchant_category, generator_config)
 
     # Baseline: an entirely in-scope session, mutated on one axis below.
     merchant_id = donor.merchant_id
@@ -203,7 +215,11 @@ def _build_violation_trace(
 
     if variant == VARIANT_AMOUNT_OVER_CEILING:
         overshoot = Decimal(
-            str(rng.uniform(float(MIN_CEILING_OVERSHOOT), float(MAX_CEILING_OVERSHOOT)))
+            str(
+                rng.uniform(
+                    float(config.min_ceiling_overshoot), float(config.max_ceiling_overshoot)
+                )
+            )
         )
         amount = (scope.max_amount * overshoot).quantize(
             AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP
@@ -221,7 +237,9 @@ def _build_violation_trace(
         merchant_id = others[int(rng.integers(0, len(others)))] if others else "merchant-unlisted"
     elif variant == VARIANT_CATEGORY_MISMATCH:
         foreign = tuple(
-            c for c in CATEGORY_CONFIGS if c.name not in scope.allowed_merchant_categories
+            c
+            for c in generator_config.categories
+            if c.name not in scope.allowed_merchant_categories
         )
         chosen = foreign[int(rng.integers(0, len(foreign)))]
         merchant_category = chosen.name
@@ -230,24 +248,26 @@ def _build_violation_trace(
         # Amount drawn from the foreign category's own distribution and capped
         # at the ceiling, so the session is not additionally an amount
         # violation and cannot be caught on amount alone.
-        amount = sample_amount(rng, chosen, ceiling=scope.max_amount)
+        amount = sample_amount(rng, chosen, ceiling=scope.max_amount, config=generator_config)
     elif variant == VARIANT_ITEM_CATEGORY_MISMATCH:
-        out_of_scope = _out_of_scope_item_categories(signed)
+        out_of_scope = _out_of_scope_item_categories(signed, generator_config)
         item_category = out_of_scope[int(rng.integers(0, len(out_of_scope)))]
     elif variant == VARIANT_WINDOW_EDGE:
         overshoot_minutes = float(
-            rng.uniform(MIN_WINDOW_OVERSHOOT_MINUTES, MAX_WINDOW_OVERSHOOT_MINUTES)
+            rng.uniform(config.min_window_overshoot_minutes, config.max_window_overshoot_minutes)
         )
         session_start = window_end + timedelta(minutes=overshoot_minutes)
     else:
         raise ValueError(f"unknown scope-violation variant {variant!r}")
 
+    # Legitimate pacing on purpose: a scope violation is defined by the
+    # authorization being wrong, not by the session looking odd.
     events, completed_at = build_events(
         rng,
         session_start,
         LEGITIMATE_LIFECYCLE,
-        MIN_EVENT_GAP_SECONDS,
-        MAX_EVENT_GAP_SECONDS,
+        generator_config.min_event_gap_seconds,
+        generator_config.max_event_gap_seconds,
     )
     return SessionTrace(
         session_id=rng_uuid(rng),
@@ -266,7 +286,11 @@ def _build_violation_trace(
 
 
 def generate_scope_violation_attacks(
-    world: AttackWorld, n_attacks: int, seed: int
+    world: AttackWorld,
+    n_attacks: int,
+    seed: int,
+    config: AttackConfig = DEFAULT_ATTACK_CONFIG,
+    params_digest: str | None = None,
 ) -> tuple[GeneratedAttack, ...]:
     """Generates scope-violation attack sessions against a legitimate corpus.
 
@@ -274,6 +298,11 @@ def generate_scope_violation_attacks(
         world: The indexed legitimate corpus to build attacks against.
         n_attacks: Number of attack sessions to produce. Must be positive.
         seed: Seed for this generator's random draws.
+        config: Attack parameters. The default reproduces the parameter set
+            every reported headline number was measured under.
+        params_digest: Digest stamped on each generated session. Defaults to
+            the legitimate world's own digest; the corpus builder passes a
+            digest covering both parameter halves instead.
 
     Returns:
         The generated attacks, in generation order.
@@ -286,14 +315,15 @@ def generate_scope_violation_attacks(
         raise ValueError(f"n_attacks must be positive, got {n_attacks}")
 
     rng = np.random.default_rng(seed)
-    params_digest = world.output.params_digest
+    digest = world.output.params_digest if params_digest is None else params_digest
+    variant_weights = config.scope_variant_mix
 
     candidates_by_variant = {
-        variant: _eligible_mandates(world, variant) for variant in _VARIANT_WEIGHTS
+        variant: _eligible_mandates(world, variant) for variant in variant_weights
     }
     available = {
         variant: weight
-        for variant, weight in _VARIANT_WEIGHTS.items()
+        for variant, weight in variant_weights.items()
         if candidates_by_variant[variant]
     }
     if not available:
@@ -301,7 +331,7 @@ def generate_scope_violation_attacks(
             "no mandate in the legitimate corpus is eligible for any scope-violation "
             "variant; generate a larger legitimate corpus first"
         )
-    for variant in _VARIANT_WEIGHTS:
+    for variant in variant_weights:
         if variant not in available:
             logger.warning(
                 "scope-violation variant %s has no eligible mandates and will not "
@@ -314,12 +344,10 @@ def generate_scope_violation_attacks(
         variant = pick_weighted(rng, available)
         pool = candidates_by_variant[variant]
         signed = pool[int(rng.integers(0, len(pool)))]
-        trace = _build_violation_trace(rng, world, signed, variant)
+        trace = _build_violation_trace(rng, world, signed, variant, config)
         attacks.append(
             GeneratedAttack(
-                labeled=label_attack(
-                    trace, AttackClass.SCOPE_VIOLATION, seed, params_digest
-                ),
+                labeled=label_attack(trace, AttackClass.SCOPE_VIOLATION, seed, digest),
                 signed_mandate=None,
                 variant=variant,
             )

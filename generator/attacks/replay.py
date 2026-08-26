@@ -35,31 +35,27 @@ import numpy as np
 
 from common.schema import AttackClass, SessionTrace
 from generator.attack_config import (
-    MAX_EXPIRED_REPLAY_LAG_HOURS,
-    MAX_RAPID_REUSE_GAP_SECONDS,
-    MIN_EXPIRED_REPLAY_LAG_HOURS,
-    MIN_RAPID_REUSE_GAP_SECONDS,
-    REPLAY_MIX_BUDGET_EXHAUSTED,
-    REPLAY_MIX_EXPIRED,
-    REPLAY_MIX_RAPID_REUSE,
+    DEFAULT_ATTACK_CONFIG,
+    VARIANT_BUDGET_EXHAUSTED,
+    VARIANT_EXPIRED,
+    VARIANT_RAPID_REUSE,
+    AttackConfig,
 )
 from generator.attacks.common import AttackWorld, GeneratedAttack, label_attack, pick_weighted
-from generator.config import MAX_EVENT_GAP_SECONDS, MIN_EVENT_GAP_SECONDS
 from generator.events import LEGITIMATE_LIFECYCLE, build_events
 from generator.rng import rng_uuid
 from mandate.schema import SignedMandate
 
 logger = logging.getLogger(__name__)
 
-VARIANT_EXPIRED = "expired"
-VARIANT_BUDGET_EXHAUSTED = "budget_exhausted"
-VARIANT_RAPID_REUSE = "rapid_reuse"
-
-_VARIANT_WEIGHTS = {
-    VARIANT_EXPIRED: REPLAY_MIX_EXPIRED,
-    VARIANT_BUDGET_EXHAUSTED: REPLAY_MIX_BUDGET_EXHAUSTED,
-    VARIANT_RAPID_REUSE: REPLAY_MIX_RAPID_REUSE,
-}
+# Variant names are re-exported from the attack config, which owns them, so a
+# rename cannot leave the weights and the generator disagreeing.
+__all__ = [
+    "VARIANT_BUDGET_EXHAUSTED",
+    "VARIANT_EXPIRED",
+    "VARIANT_RAPID_REUSE",
+    "generate_replay_attacks",
+]
 
 # Minimum remaining validity a mandate must have for a rapid-reuse replay to
 # land inside its window rather than tipping past expiry, which would make
@@ -114,6 +110,7 @@ def _build_replay_trace(
     world: AttackWorld,
     signed: SignedMandate,
     variant: str,
+    config: AttackConfig,
 ) -> SessionTrace:
     """Builds one replay session against an already-used mandate.
 
@@ -122,6 +119,7 @@ def _build_replay_trace(
         world: The indexed legitimate corpus.
         signed: The mandate being replayed.
         variant: One of the module's VARIANT_* constants.
+        config: Attack parameters supplying the replay lag and gap bounds.
 
     Returns:
         The synthetic session trace.
@@ -136,7 +134,7 @@ def _build_replay_trace(
 
     if variant == VARIANT_EXPIRED:
         lag_hours = float(
-            rng.uniform(MIN_EXPIRED_REPLAY_LAG_HOURS, MAX_EXPIRED_REPLAY_LAG_HOURS)
+            rng.uniform(config.min_expired_replay_lag_hours, config.max_expired_replay_lag_hours)
         )
         session_start = mandate.scope.valid_until + timedelta(hours=lag_hours)
     elif variant == VARIANT_BUDGET_EXHAUSTED:
@@ -147,17 +145,23 @@ def _build_replay_trace(
         offset = timedelta(seconds=float(rng.uniform(0, max(remaining.total_seconds(), 1.0))))
         session_start = min(last_used + offset, mandate.scope.valid_until - timedelta(minutes=1))
     elif variant == VARIANT_RAPID_REUSE:
-        gap = float(rng.uniform(MIN_RAPID_REUSE_GAP_SECONDS, MAX_RAPID_REUSE_GAP_SECONDS))
+        gap = float(
+            rng.uniform(config.min_rapid_reuse_gap_seconds, config.max_rapid_reuse_gap_seconds)
+        )
         session_start = last_used + timedelta(seconds=gap)
     else:
         raise ValueError(f"unknown replay variant {variant!r}")
 
+    # Legitimate pacing on purpose: a replay is defined by the authorization
+    # being wrong, not by the session looking odd. Drawing from the world's own
+    # generator config keeps that guarantee under a perturbed sensitivity grid.
+    generator_config = world.output.config
     events, completed_at = build_events(
         rng,
         session_start,
         LEGITIMATE_LIFECYCLE,
-        MIN_EVENT_GAP_SECONDS,
-        MAX_EVENT_GAP_SECONDS,
+        generator_config.min_event_gap_seconds,
+        generator_config.max_event_gap_seconds,
     )
     return SessionTrace(
         session_id=rng_uuid(rng),
@@ -176,7 +180,11 @@ def _build_replay_trace(
 
 
 def generate_replay_attacks(
-    world: AttackWorld, n_attacks: int, seed: int
+    world: AttackWorld,
+    n_attacks: int,
+    seed: int,
+    config: AttackConfig = DEFAULT_ATTACK_CONFIG,
+    params_digest: str | None = None,
 ) -> tuple[GeneratedAttack, ...]:
     """Generates mandate-replay attack sessions against a legitimate corpus.
 
@@ -184,6 +192,13 @@ def generate_replay_attacks(
         world: The indexed legitimate corpus to build attacks against.
         n_attacks: Number of attack sessions to produce. Must be positive.
         seed: Seed for this generator's random draws.
+        config: Attack parameters. The default reproduces the parameter set
+            every reported headline number was measured under.
+        params_digest: Digest stamped on each generated session. Defaults to
+            the legitimate world's own digest, which covers the generator
+            parameters but not the attack ones; the corpus builder passes a
+            combined digest instead so a sensitivity grid point that varies
+            only attack parameters is still distinguishable.
 
     Returns:
         The generated attacks, in generation order.
@@ -199,15 +214,16 @@ def generate_replay_attacks(
         raise ValueError(f"n_attacks must be positive, got {n_attacks}")
 
     rng = np.random.default_rng(seed)
-    params_digest = world.output.params_digest
+    digest = world.output.params_digest if params_digest is None else params_digest
+    variant_weights = config.replay_variant_mix
     attacks: list[GeneratedAttack] = []
 
     candidates_by_variant = {
-        variant: _eligible_mandates(world, variant) for variant in _VARIANT_WEIGHTS
+        variant: _eligible_mandates(world, variant) for variant in variant_weights
     }
     available = {
         variant: weight
-        for variant, weight in _VARIANT_WEIGHTS.items()
+        for variant, weight in variant_weights.items()
         if candidates_by_variant[variant]
     }
     if not available:
@@ -215,7 +231,7 @@ def generate_replay_attacks(
             "no mandate in the legitimate corpus is eligible for any replay variant; "
             "generate a larger legitimate corpus first"
         )
-    for variant in _VARIANT_WEIGHTS:
+    for variant in variant_weights:
         if variant not in available:
             logger.warning(
                 "replay variant %s has no eligible mandates and will not be generated", variant
@@ -225,12 +241,10 @@ def generate_replay_attacks(
         variant = pick_weighted(rng, available)
         pool = candidates_by_variant[variant]
         signed = pool[int(rng.integers(0, len(pool)))]
-        trace = _build_replay_trace(rng, world, signed, variant)
+        trace = _build_replay_trace(rng, world, signed, variant, config)
         attacks.append(
             GeneratedAttack(
-                labeled=label_attack(
-                    trace, AttackClass.MANDATE_REPLAY, seed, params_digest
-                ),
+                labeled=label_attack(trace, AttackClass.MANDATE_REPLAY, seed, digest),
                 signed_mandate=None,
                 variant=variant,
             )

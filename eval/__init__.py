@@ -1,1 +1,1 @@
-"""Evaluation harness: metrics, significance tests, plots (Day 5)."""
+"""Evaluation harness: metrics, significance tests, cost and latency reporting."""

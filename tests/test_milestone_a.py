@@ -130,7 +130,9 @@ def test_rejects_empty_corpus() -> None:
     `EvaluationCorpus` instead of trying to coerce one from the generator.
     """
     from detect.resolution import InMemoryMandateResolver
+    from generator.attack_config import DEFAULT_ATTACK_CONFIG, combined_params_digest
     from generator.attacks.corpus import EvaluationCorpus
+    from generator.config import DEFAULT_GENERATOR_CONFIG
     from mandate.verification import AgentKeyRegistry
 
     empty = EvaluationCorpus(
@@ -140,6 +142,9 @@ def test_rejects_empty_corpus() -> None:
         variant_by_session={},
         attack_base_rate=0.0,
         seed=0,
+        generator_config=DEFAULT_GENERATOR_CONFIG,
+        attack_config=DEFAULT_ATTACK_CONFIG,
+        params_digest=combined_params_digest(DEFAULT_GENERATOR_CONFIG, DEFAULT_ATTACK_CONFIG),
     )
     with pytest.raises(ValueError, match="empty corpus"):
         run_milestone_a(empty)

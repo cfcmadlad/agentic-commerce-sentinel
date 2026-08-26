@@ -83,7 +83,7 @@ def test_every_session_mandate_verifies_at_its_own_session_time() -> None:
     """Replaying sessions through a ledger in order, every mandate must verify valid.
 
     Verifies the generator's output is consumable by Layer 1 as-is: no
-    fixture massaging required for a downstream rules baseline (Day 3) to
+    fixture massaging required for a downstream rules baseline to
     treat every one of these sessions as legitimate.
     """
     out = generate_legitimate_sessions(N_SESSIONS, seed=SEED)
@@ -100,7 +100,7 @@ def test_some_mandates_are_reused_across_sessions() -> None:
     """The recurring-mandate path must actually trigger at the configured probability.
 
     A generator that never reuses mandates would make the mandate-replay
-    attack generator (Day 2) unable to find a legitimately-issued,
+    attack generator unable to find a legitimately-issued,
     partially-spent mandate to imitate.
     """
     out = generate_legitimate_sessions(N_SESSIONS, seed=SEED)

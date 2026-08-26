@@ -29,21 +29,15 @@ import numpy as np
 
 from common.schema import AttackClass, EventType, SessionTrace
 from generator.attack_config import (
-    IMPERSONATION_MIX_AGENT_BINDING_MISMATCH,
-    IMPERSONATION_MIX_BEHAVIORAL_ONLY,
-    IMPERSONATION_MIX_FORGED_SIGNATURE,
-    IMPERSONATION_MIX_UNREGISTERED_KEY,
-    MAX_SCRIPTED_EVENT_GAP_SECONDS,
-    MIN_SCRIPTED_EVENT_GAP_SECONDS,
-    SKIP_BROWSE_PROBABILITY,
+    DEFAULT_ATTACK_CONFIG,
+    VARIANT_AGENT_BINDING_MISMATCH,
+    VARIANT_BEHAVIORAL_ONLY,
+    VARIANT_FORGED_SIGNATURE,
+    VARIANT_UNREGISTERED_KEY,
+    AttackConfig,
 )
 from generator.attacks.common import AttackWorld, GeneratedAttack, label_attack, pick_weighted
-from generator.config import (
-    MAX_EVENT_GAP_SECONDS,
-    MAX_MANDATE_LIFETIME_DAYS,
-    MIN_EVENT_GAP_SECONDS,
-    MIN_MANDATE_LIFETIME_DAYS,
-)
+from generator.config import GeneratorConfig
 from generator.events import LEGITIMATE_LIFECYCLE, build_events
 from generator.legitimate import AMOUNT_QUANTIZE, ED25519_SEED_BYTES
 from generator.rng import rng_nonce, rng_uuid
@@ -52,39 +46,53 @@ from mandate.signing import key_id_for_public_key, keypair_from_seed_bytes, sign
 
 logger = logging.getLogger(__name__)
 
-VARIANT_UNREGISTERED_KEY = "unregistered_key"
-VARIANT_FORGED_SIGNATURE = "forged_signature"
-VARIANT_AGENT_BINDING_MISMATCH = "agent_binding_mismatch"
-VARIANT_BEHAVIORAL_ONLY = "behavioral_only"
+# Variant names are re-exported from the attack config, which owns them, so a
+# rename cannot leave the weights and the generator disagreeing.
+__all__ = [
+    "VARIANT_AGENT_BINDING_MISMATCH",
+    "VARIANT_BEHAVIORAL_ONLY",
+    "VARIANT_FORGED_SIGNATURE",
+    "VARIANT_UNREGISTERED_KEY",
+    "generate_impersonation_attacks",
+]
 
-_VARIANT_WEIGHTS = {
-    VARIANT_UNREGISTERED_KEY: IMPERSONATION_MIX_UNREGISTERED_KEY,
-    VARIANT_FORGED_SIGNATURE: IMPERSONATION_MIX_FORGED_SIGNATURE,
-    VARIANT_AGENT_BINDING_MISMATCH: IMPERSONATION_MIX_AGENT_BINDING_MISMATCH,
-    VARIANT_BEHAVIORAL_ONLY: IMPERSONATION_MIX_BEHAVIORAL_ONLY,
-}
+# Validity of a variant name is a property of the taxonomy, not of the weights
+# a particular config assigns: a config may legitimately zero a variant's
+# weight, and that must not make the name itself unknown.
+_KNOWN_VARIANTS: frozenset[str] = frozenset(
+    {
+        VARIANT_UNREGISTERED_KEY,
+        VARIANT_FORGED_SIGNATURE,
+        VARIANT_AGENT_BINDING_MISMATCH,
+        VARIANT_BEHAVIORAL_ONLY,
+    }
+)
 
 # Ceiling multiplier for a forged mandate copy — large enough the forgery is
 # worth attempting; the signature check stops it, not the edit's size.
 FORGED_CEILING_MULTIPLE = Decimal("6")
 
 
-def _scripted_stages(rng: np.random.Generator) -> tuple[EventType, ...]:
+def _scripted_stages(rng: np.random.Generator, config: AttackConfig) -> tuple[EventType, ...]:
     """Picks lifecycle stages for a scripted client, browse omitted probabilistically.
 
     Args:
         rng: Seeded random generator.
+        config: Attack parameters supplying the browse-skip probability.
 
     Returns:
         The stage sequence.
     """
-    if rng.random() < SKIP_BROWSE_PROBABILITY:
+    if rng.random() < config.skip_browse_probability:
         return tuple(s for s in LEGITIMATE_LIFECYCLE if s is not EventType.CATALOG_BROWSE)
     return LEGITIMATE_LIFECYCLE
 
 
 def _self_signed_mandate(
-    rng: np.random.Generator, donor_trace: SessionTrace, issued_at: datetime
+    rng: np.random.Generator,
+    donor_trace: SessionTrace,
+    issued_at: datetime,
+    generator_config: GeneratorConfig,
 ) -> SignedMandate:
     """Mints a mandate signed by a key no registry knows about.
 
@@ -92,12 +100,20 @@ def _self_signed_mandate(
         rng: Seeded random generator.
         donor_trace: A genuine session to copy merchant/category/amount from.
         issued_at: Claimed issuance time.
+        generator_config: Generator parameters supplying the lifetime bounds,
+            so a forged mandate's validity window is drawn from the same
+            distribution as a genuine one and cannot be separated on that.
 
     Returns:
         The self-signed mandate.
     """
     private_key, public_key = keypair_from_seed_bytes(rng.bytes(ED25519_SEED_BYTES))
-    lifetime_days = int(rng.integers(MIN_MANDATE_LIFETIME_DAYS, MAX_MANDATE_LIFETIME_DAYS + 1))
+    lifetime_days = int(
+        rng.integers(
+            generator_config.min_mandate_lifetime_days,
+            generator_config.max_mandate_lifetime_days + 1,
+        )
+    )
     valid_until = issued_at + timedelta(days=lifetime_days)
     ceiling = (donor_trace.amount * Decimal("2")).quantize(
         AMOUNT_QUANTIZE, rounding=ROUND_HALF_UP
@@ -172,7 +188,7 @@ def _eligible_mandates(world: AttackWorld, variant: str) -> list[SignedMandate]:
     Raises:
         ValueError: If `variant` is unknown.
     """
-    if variant not in _VARIANT_WEIGHTS:
+    if variant not in _KNOWN_VARIANTS:
         raise ValueError(f"unknown impersonation variant {variant!r}")
 
     if variant == VARIANT_UNREGISTERED_KEY:
@@ -190,7 +206,13 @@ def _eligible_mandates(world: AttackWorld, variant: str) -> list[SignedMandate]:
 
 
 def _build_impersonation(
-    rng: np.random.Generator, world: AttackWorld, signed: SignedMandate, variant: str, seed: int
+    rng: np.random.Generator,
+    world: AttackWorld,
+    signed: SignedMandate,
+    variant: str,
+    seed: int,
+    config: AttackConfig,
+    params_digest: str,
 ) -> GeneratedAttack:
     """Builds one impersonation session and any mandate material it introduces.
 
@@ -200,6 +222,9 @@ def _build_impersonation(
         signed: The genuine mandate this variant builds from.
         variant: One of the module's VARIANT_* constants.
         seed: Generator seed, recorded on the label.
+        config: Attack parameters supplying the scripted pacing bounds and
+            browse-skip probability.
+        params_digest: Digest stamped on the label.
 
     Returns:
         The generated attack.
@@ -207,6 +232,7 @@ def _build_impersonation(
     Raises:
         ValueError: If `variant` is unknown.
     """
+    generator_config = world.output.config
     donor_sessions = world.session_by_mandate[signed.mandate.mandate_id]
     donor = donor_sessions[int(rng.integers(0, len(donor_sessions)))]
     session_start = _in_window_start(rng, world, signed)
@@ -215,25 +241,27 @@ def _build_impersonation(
     presented_mandate_id = signed.mandate.mandate_id
     acting_agent_id = donor.agent_id
     stages = LEGITIMATE_LIFECYCLE
-    min_gap, max_gap = MIN_EVENT_GAP_SECONDS, MAX_EVENT_GAP_SECONDS
+    min_gap = generator_config.min_event_gap_seconds
+    max_gap = generator_config.max_event_gap_seconds
+    scripted_gaps = (config.min_scripted_event_gap_seconds, config.max_scripted_event_gap_seconds)
 
     if variant == VARIANT_UNREGISTERED_KEY:
-        presented = _self_signed_mandate(rng, donor, session_start)
+        presented = _self_signed_mandate(rng, donor, session_start, generator_config)
         presented_mandate_id = presented.mandate.mandate_id
-        stages = _scripted_stages(rng)
-        min_gap, max_gap = MIN_SCRIPTED_EVENT_GAP_SECONDS, MAX_SCRIPTED_EVENT_GAP_SECONDS
+        stages = _scripted_stages(rng, config)
+        min_gap, max_gap = scripted_gaps
     elif variant == VARIANT_FORGED_SIGNATURE:
         presented = _forged_mandate(signed)
         presented_mandate_id = presented.mandate.mandate_id
-        stages = _scripted_stages(rng)
-        min_gap, max_gap = MIN_SCRIPTED_EVENT_GAP_SECONDS, MAX_SCRIPTED_EVENT_GAP_SECONDS
+        stages = _scripted_stages(rng, config)
+        min_gap, max_gap = scripted_gaps
     elif variant == VARIANT_AGENT_BINDING_MISMATCH:
         # Acting agent drawn from the same pool, so agent_id itself is uninformative.
         others = [a for a in world.output.agents if a.agent_id != signed.mandate.agent_id]
         acting_agent_id = others[int(rng.integers(0, len(others)))].agent_id
     elif variant == VARIANT_BEHAVIORAL_ONLY:
-        stages = _scripted_stages(rng)
-        min_gap, max_gap = MIN_SCRIPTED_EVENT_GAP_SECONDS, MAX_SCRIPTED_EVENT_GAP_SECONDS
+        stages = _scripted_stages(rng, config)
+        min_gap, max_gap = scripted_gaps
     else:
         raise ValueError(f"unknown impersonation variant {variant!r}")
 
@@ -253,14 +281,18 @@ def _build_impersonation(
         completed_at=completed_at,
     )
     return GeneratedAttack(
-        labeled=label_attack(trace, AttackClass.AGENT_IMPERSONATION, seed, world.output.params_digest),
+        labeled=label_attack(trace, AttackClass.AGENT_IMPERSONATION, seed, params_digest),
         signed_mandate=presented,
         variant=variant,
     )
 
 
 def generate_impersonation_attacks(
-    world: AttackWorld, n_attacks: int, seed: int
+    world: AttackWorld,
+    n_attacks: int,
+    seed: int,
+    config: AttackConfig = DEFAULT_ATTACK_CONFIG,
+    params_digest: str | None = None,
 ) -> tuple[GeneratedAttack, ...]:
     """Generates agent-impersonation attack sessions against a legitimate corpus.
 
@@ -268,6 +300,11 @@ def generate_impersonation_attacks(
         world: The indexed legitimate corpus to build attacks against.
         n_attacks: Number of attack sessions to produce. Must be positive.
         seed: Seed for this generator's random draws.
+        config: Attack parameters. The default reproduces the parameter set
+            every reported headline number was measured under.
+        params_digest: Digest stamped on each generated session. Defaults to
+            the legitimate world's own digest; the corpus builder passes a
+            digest covering both parameter halves instead.
 
     Returns:
         The generated attacks, in generation order.
@@ -280,14 +317,16 @@ def generate_impersonation_attacks(
         raise ValueError(f"n_attacks must be positive, got {n_attacks}")
 
     rng = np.random.default_rng(seed)
-    candidates_by_variant = {v: _eligible_mandates(world, v) for v in _VARIANT_WEIGHTS}
-    available = {v: w for v, w in _VARIANT_WEIGHTS.items() if candidates_by_variant[v]}
+    digest = world.output.params_digest if params_digest is None else params_digest
+    variant_weights = config.impersonation_variant_mix
+    candidates_by_variant = {v: _eligible_mandates(world, v) for v in variant_weights}
+    available = {v: w for v, w in variant_weights.items() if candidates_by_variant[v]}
     if not available:
         raise ValueError(
             "no mandate in the legitimate corpus is eligible for any impersonation "
             "variant; generate a larger legitimate corpus first"
         )
-    for variant in _VARIANT_WEIGHTS:
+    for variant in variant_weights:
         if variant not in available:
             logger.warning("impersonation variant %s has no eligible mandates, skipped", variant)
 
@@ -296,6 +335,8 @@ def generate_impersonation_attacks(
         variant = pick_weighted(rng, available)
         pool = candidates_by_variant[variant]
         signed = pool[int(rng.integers(0, len(pool)))]
-        attacks.append(_build_impersonation(rng, world, signed, variant, seed))
+        attacks.append(
+            _build_impersonation(rng, world, signed, variant, seed, config, digest)
+        )
 
     return tuple(attacks)

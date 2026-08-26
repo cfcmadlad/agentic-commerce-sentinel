@@ -16,14 +16,15 @@ from uuid import UUID
 from common.schema import AttackClass, LabeledSession
 from detect.resolution import InMemoryMandateResolver
 from generator.attack_config import (
-    CLASS_MIX_AGENT_IMPERSONATION,
-    CLASS_MIX_MANDATE_REPLAY,
-    DEFAULT_ATTACK_BASE_RATE,
+    DEFAULT_ATTACK_CONFIG,
+    AttackConfig,
+    combined_params_digest,
 )
 from generator.attacks.common import GeneratedAttack, build_world
 from generator.attacks.impersonation import generate_impersonation_attacks
 from generator.attacks.replay import generate_replay_attacks
 from generator.attacks.scope_violation import generate_scope_violation_attacks
+from generator.config import DEFAULT_GENERATOR_CONFIG, GeneratorConfig
 from generator.legitimate import generate_legitimate_sessions
 from mandate.verification import AgentKeyRegistry
 
@@ -52,6 +53,12 @@ class EvaluationCorpus:
             never reach a feature extractor or detector.
         attack_base_rate: Realized fraction of attack sessions.
         seed: The corpus seed.
+        generator_config: Legitimate-traffic parameters this corpus was built
+            under.
+        attack_config: Attack-generation parameters this corpus was built
+            under.
+        params_digest: Digest covering both parameter sets, so a sensitivity
+            grid point is identifiable from the corpus alone.
     """
 
     labeled_sessions: tuple[LabeledSession, ...]
@@ -60,20 +67,24 @@ class EvaluationCorpus:
     variant_by_session: dict[UUID, str]
     attack_base_rate: float
     seed: int
+    generator_config: GeneratorConfig
+    attack_config: AttackConfig
+    params_digest: str
 
 
-def _split_attack_counts(n_attacks: int) -> dict[AttackClass, int]:
+def _split_attack_counts(n_attacks: int, config: AttackConfig) -> dict[AttackClass, int]:
     """Divides an attack budget across the three training classes.
 
     Args:
         n_attacks: Total attack sessions to produce.
+        config: Attack parameters supplying the class mix.
 
     Returns:
         Per-class counts summing to `n_attacks`. Scope violation absorbs the
         rounding remainder since it carries the largest configured share.
     """
-    replay = int(n_attacks * CLASS_MIX_MANDATE_REPLAY)
-    impersonation = int(n_attacks * CLASS_MIX_AGENT_IMPERSONATION)
+    replay = int(n_attacks * config.class_mix_mandate_replay)
+    impersonation = int(n_attacks * config.class_mix_agent_impersonation)
     scope = n_attacks - replay - impersonation
     return {
         AttackClass.MANDATE_REPLAY: replay,
@@ -85,14 +96,21 @@ def _split_attack_counts(n_attacks: int) -> dict[AttackClass, int]:
 def build_evaluation_corpus(
     n_legitimate: int,
     seed: int,
-    attack_base_rate: float = DEFAULT_ATTACK_BASE_RATE,
+    attack_base_rate: float | None = None,
+    generator_config: GeneratorConfig = DEFAULT_GENERATOR_CONFIG,
+    attack_config: AttackConfig = DEFAULT_ATTACK_CONFIG,
 ) -> EvaluationCorpus:
     """Generates legitimate traffic and the three training attack classes together.
 
     Args:
         n_legitimate: Number of legitimate sessions. Must be positive.
         seed: Corpus seed; the same seed always produces the same corpus.
-        attack_base_rate: Target attack fraction. Must be in (0, 1).
+        attack_base_rate: Target attack fraction, overriding
+            `attack_config.attack_base_rate` when given. Must be in (0, 1).
+        generator_config: Legitimate-traffic parameters. The default
+            reproduces the parameter set every reported headline number was
+            measured under.
+        attack_config: Attack-generation parameters, same default contract.
 
     Returns:
         The assembled corpus.
@@ -105,11 +123,12 @@ def build_evaluation_corpus(
     """
     if n_legitimate <= 0:
         raise ValueError(f"n_legitimate must be positive, got {n_legitimate}")
-    if not 0.0 < attack_base_rate < 1.0:
-        raise ValueError(f"attack_base_rate must be in (0, 1), got {attack_base_rate}")
+    rate = attack_config.attack_base_rate if attack_base_rate is None else attack_base_rate
+    if not 0.0 < rate < 1.0:
+        raise ValueError(f"attack_base_rate must be in (0, 1), got {rate}")
 
-    n_attacks = round(n_legitimate * attack_base_rate / (1.0 - attack_base_rate))
-    counts = _split_attack_counts(n_attacks)
+    n_attacks = round(n_legitimate * rate / (1.0 - rate))
+    counts = _split_attack_counts(n_attacks, attack_config)
     empty = [cls.value for cls, count in counts.items() if count < 1]
     if empty:
         raise ValueError(
@@ -117,21 +136,41 @@ def build_evaluation_corpus(
             f"increase n_legitimate or attack_base_rate"
         )
 
-    legitimate = generate_legitimate_sessions(n_legitimate, seed=seed)
+    legitimate = generate_legitimate_sessions(n_legitimate, seed=seed, config=generator_config)
     world = build_world(legitimate)
+
+    # Attack sessions are stamped with a digest covering both halves: a grid
+    # point that varies only attack parameters produces an identical
+    # legitimate substrate, and a generator-only digest could not tell the two
+    # corpora apart.
+    digest = combined_params_digest(generator_config, attack_config)
 
     attacks: list[GeneratedAttack] = []
     attacks.extend(
-        generate_replay_attacks(world, counts[AttackClass.MANDATE_REPLAY], seed=seed + SEED_OFFSET_REPLAY)
+        generate_replay_attacks(
+            world,
+            counts[AttackClass.MANDATE_REPLAY],
+            seed=seed + SEED_OFFSET_REPLAY,
+            config=attack_config,
+            params_digest=digest,
+        )
     )
     attacks.extend(
         generate_scope_violation_attacks(
-            world, counts[AttackClass.SCOPE_VIOLATION], seed=seed + SEED_OFFSET_SCOPE
+            world,
+            counts[AttackClass.SCOPE_VIOLATION],
+            seed=seed + SEED_OFFSET_SCOPE,
+            config=attack_config,
+            params_digest=digest,
         )
     )
     attacks.extend(
         generate_impersonation_attacks(
-            world, counts[AttackClass.AGENT_IMPERSONATION], seed=seed + SEED_OFFSET_IMPERSONATION
+            world,
+            counts[AttackClass.AGENT_IMPERSONATION],
+            seed=seed + SEED_OFFSET_IMPERSONATION,
+            config=attack_config,
+            params_digest=digest,
         )
     )
 
@@ -168,4 +207,7 @@ def build_evaluation_corpus(
         variant_by_session=variant_by_session,
         attack_base_rate=realized_rate,
         seed=seed,
+        generator_config=generator_config,
+        attack_config=attack_config,
+        params_digest=digest,
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from decimal import Decimal
 
 import pytest
@@ -30,6 +31,39 @@ def test_canonical_bytes_differs_on_content_change() -> None:
     mandate_a = build_mandate(private_key, scope=build_scope(max_amount=Decimal("100.00")))
     mandate_b = build_mandate(private_key, scope=build_scope(max_amount=Decimal("999.00")))
     assert canonical_bytes(mandate_a) != canonical_bytes(mandate_b)
+
+
+def test_canonical_bytes_orders_category_sets_independently_of_hash_seed() -> None:
+    """Category-set fields must canonicalize in sorted order, not set-iteration order.
+
+    `frozenset` iteration order depends on Python's per-process hash
+    randomization (`PYTHONHASHSEED`), not on the set's contents. A mandate
+    signed in one process and verified in a different one -- the ordinary
+    case, since a client signs and a separate server verifies -- would
+    otherwise canonicalize to different bytes for the exact same logical
+    content purely because the two processes drew different hash seeds,
+    causing a perfectly legitimate signature to fail verification for a
+    reason that has nothing to do with the mandate's actual content.
+    Sorting removes the dependency on iteration order entirely; asserting
+    the exact sorted order (rather than just equality across two calls in
+    this same process, which `test_canonical_bytes_is_deterministic`
+    already covers and which a hash-seed bug would not fail either) is
+    what actually pins the fix down.
+    """
+    private_key, _ = generate_keypair()
+    mandate = build_mandate(
+        private_key,
+        scope=build_scope(
+            allowed_merchant_ids=frozenset({"merchant-c", "merchant-a", "merchant-b"}),
+            allowed_merchant_categories=frozenset({"fashion", "electronics", "grocery"}),
+            allowed_item_categories=frozenset({"phones", "apparel", "produce", "packaged_food"}),
+        ),
+    )
+    payload = json.loads(canonical_bytes(mandate))
+    scope = payload["scope"]
+    assert scope["allowed_merchant_ids"] == ["merchant-a", "merchant-b", "merchant-c"]
+    assert scope["allowed_merchant_categories"] == ["electronics", "fashion", "grocery"]
+    assert scope["allowed_item_categories"] == ["apparel", "packaged_food", "phones", "produce"]
 
 
 def test_sign_then_verify_round_trips() -> None:

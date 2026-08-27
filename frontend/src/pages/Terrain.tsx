@@ -224,6 +224,15 @@ export default function Terrain() {
   return (
     <>
       <div className="panel">
+        <div className="page-intro">
+          <span className="page-intro__eyebrow">New here?</span>
+          <p>
+            This is the same real scores as the Collide page, but as a landscape instead of a
+            scatterplot — think of it as a topographic map of risk. Darker ground is where real
+            sessions cluster and score higher; pale ground is where too few sessions exist to say
+            anything confident at all.
+          </p>
+        </div>
         <h2 className="section-title">Risk terrain</h2>
         <p className="section-note">
           A real kernel-density field over this model's two highest-ranked features —{" "}

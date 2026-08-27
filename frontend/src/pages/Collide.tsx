@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CATEGORY_LABELS,
+  colorForCategory,
+  jitterFor,
+  loadCollisionData,
+  scoreToUnit,
+  unitToScore,
+  type CollisionData,
+} from "../lib/collide";
 
 /**
  * The collision chart.
@@ -21,54 +30,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
  * asserted.
  */
 
-interface CollisionPoint {
-  score: number;
-  category: string;
-  blocked_by_rules: boolean;
-}
-
-interface CollisionData {
-  threshold: number;
-  points: CollisionPoint[];
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  legitimate: "Legitimate",
-  scope_violation: "Scope violation",
-  agent_impersonation: "Agent impersonation",
-  mandate_replay: "Mandate replay",
-  mandate_chaining: "Mandate chaining (held-out)",
-};
-
 const WIDTH = 900;
 const HEIGHT = 420;
 const MARGIN = { top: 20, right: 24, bottom: 44, left: 24 };
 const PLOT_W = WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_H = HEIGHT - MARGIN.top - MARGIN.bottom;
-const EPS = 1e-4;
-const LOG_MIN = Math.log10(EPS);
-const LOG_MAX = Math.log10(1 + EPS);
 
 function scoreToX(score: number): number {
-  const t = (Math.log10(score + EPS) - LOG_MIN) / (LOG_MAX - LOG_MIN);
-  return MARGIN.left + t * PLOT_W;
+  return MARGIN.left + scoreToUnit(score) * PLOT_W;
 }
 
 function xToScore(x: number): number {
-  const t = Math.max(0, Math.min(1, (x - MARGIN.left) / PLOT_W));
-  return Math.pow(10, t * (LOG_MAX - LOG_MIN) + LOG_MIN) - EPS;
-}
-
-/** Deterministic pseudo-random jitter, stable across re-renders. */
-function jitterFor(index: number): number {
-  const x = Math.sin(index * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-function colorFor(category: string): string {
-  if (category === "legitimate") return "#c7c9cd";
-  if (category === "mandate_chaining") return "#e8935f";
-  return "#17191c";
+  return unitToScore((x - MARGIN.left) / PLOT_W);
 }
 
 export default function Collide() {
@@ -79,12 +52,8 @@ export default function Collide() {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
-    fetch("/collision.json")
-      .then((res) => {
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        return res.json();
-      })
-      .then((d: CollisionData) => {
+    loadCollisionData()
+      .then((d) => {
         setData(d);
         setThreshold(d.threshold);
       })
@@ -129,6 +98,15 @@ export default function Collide() {
   return (
     <>
       <div className="panel">
+        <div className="page-intro">
+          <span className="page-intro__eyebrow">New here?</span>
+          <p>
+            Every dot below is one real transaction this system already scored, positioned by how
+            suspicious it looked — further right means a higher risk score. Drag the black line
+            left or right to see what would happen at a different block threshold, including on an
+            attack type ("mandate chaining") this system was never trained to catch.
+          </p>
+        </div>
         <h2 className="section-title">Collide</h2>
         <p className="section-note">
           {data.points.length.toLocaleString()} real sessions, each plotted at its real ensemble
@@ -174,7 +152,7 @@ export default function Collide() {
               cx={scoreToX(p.score)}
               cy={MARGIN.top + jitterFor(i) * PLOT_H}
               r={p.category === "mandate_chaining" ? 3.4 : 2.6}
-              fill={colorFor(p.category)}
+              fill={colorForCategory(p.category)}
               opacity={p.score >= threshold ? 0.9 : 0.35}
             />
           ))}
@@ -232,7 +210,7 @@ export default function Collide() {
                           width: 9,
                           height: 9,
                           borderRadius: "50%",
-                          background: colorFor(category),
+                          background: colorForCategory(category),
                           display: "inline-block",
                         }}
                       />

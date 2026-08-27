@@ -1,0 +1,370 @@
+{
+  "11111111-1111-4111-8111-111111111111": {
+    "trace": {
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "agent_id": "demo-agent-00",
+      "user_id": "demo-user-00",
+      "mandate_id": "6b31c5f4-abab-5c54-98dd-d2957125ba77",
+      "merchant_id": "freshmart-01",
+      "merchant_category": "grocery",
+      "item_category": "packaged_food",
+      "amount": "620.00",
+      "currency": "INR",
+      "events": [
+        {
+          "event_type": "intent_captured",
+          "timestamp": "2026-01-01T09:00:00Z",
+          "payload": {}
+        },
+        {
+          "event_type": "mandate_presented",
+          "timestamp": "2026-01-01T09:00:19Z",
+          "payload": {}
+        },
+        {
+          "event_type": "catalog_browse",
+          "timestamp": "2026-01-01T09:00:41Z",
+          "payload": {}
+        },
+        {
+          "event_type": "cart_build",
+          "timestamp": "2026-01-01T09:01:01Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_attempt",
+          "timestamp": "2026-01-01T09:01:25Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_result",
+          "timestamp": "2026-01-01T09:01:41Z",
+          "payload": {}
+        }
+      ],
+      "started_at": "2026-01-01T09:00:00Z",
+      "completed_at": "2026-01-01T09:01:41Z"
+    },
+    "signed_mandate": {
+      "mandate": {
+        "mandate_id": "6b31c5f4-abab-5c54-98dd-d2957125ba77",
+        "schema_version": "1.0",
+        "agent_id": "demo-agent-00",
+        "user_id": "demo-user-00",
+        "parent_mandate_id": null,
+        "issued_at": "2026-01-01T07:00:00Z",
+        "expires_at": "2026-01-01T16:00:00Z",
+        "nonce": "ceaf91b21fa75992872092434e39f729",
+        "scope": {
+          "max_amount": "3000",
+          "currency": "INR",
+          "allowed_merchant_ids": null,
+          "allowed_merchant_categories": [
+            "grocery"
+          ],
+          "allowed_item_categories": [
+            "produce",
+            "packaged_food"
+          ],
+          "valid_from": "2026-01-01T07:00:00Z",
+          "valid_until": "2026-01-01T15:00:00Z",
+          "max_transaction_count": 10
+        },
+        "signer_key_id": "ed25519:5584637858cfc677"
+      },
+      "signature": "wNiPU3sQu8pzXG6GWpo1DAlUXvcoVRYX//2E5rtc3HM4RjRFvD2V1sgMo0k6IymRjhNAaKqxBPcF8PrqbwmUDg=="
+    }
+  },
+  "22222222-2222-4222-8222-222222222222": {
+    "trace": {
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "agent_id": "demo-agent-00",
+      "user_id": "demo-user-00",
+      "mandate_id": "aff016c8-d8eb-523e-981d-e8f1e4d90f17",
+      "merchant_id": "freshmart-01",
+      "merchant_category": "grocery",
+      "item_category": "packaged_food",
+      "amount": "2450.00",
+      "currency": "INR",
+      "events": [
+        {
+          "event_type": "intent_captured",
+          "timestamp": "2026-01-01T09:05:00Z",
+          "payload": {}
+        },
+        {
+          "event_type": "mandate_presented",
+          "timestamp": "2026-01-01T09:05:17Z",
+          "payload": {}
+        },
+        {
+          "event_type": "catalog_browse",
+          "timestamp": "2026-01-01T09:05:42Z",
+          "payload": {}
+        },
+        {
+          "event_type": "cart_build",
+          "timestamp": "2026-01-01T09:06:01Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_attempt",
+          "timestamp": "2026-01-01T09:06:24Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_result",
+          "timestamp": "2026-01-01T09:06:42Z",
+          "payload": {}
+        }
+      ],
+      "started_at": "2026-01-01T09:05:00Z",
+      "completed_at": "2026-01-01T09:06:42Z"
+    },
+    "signed_mandate": {
+      "mandate": {
+        "mandate_id": "aff016c8-d8eb-523e-981d-e8f1e4d90f17",
+        "schema_version": "1.0",
+        "agent_id": "demo-agent-00",
+        "user_id": "demo-user-00",
+        "parent_mandate_id": null,
+        "issued_at": "2026-01-01T08:00:00Z",
+        "expires_at": "2026-01-01T16:00:00Z",
+        "nonce": "083ae9f1d55d581dbb3022ea05198d85",
+        "scope": {
+          "max_amount": "2000",
+          "currency": "INR",
+          "allowed_merchant_ids": null,
+          "allowed_merchant_categories": [
+            "grocery"
+          ],
+          "allowed_item_categories": [
+            "produce",
+            "packaged_food"
+          ],
+          "valid_from": "2026-01-01T08:00:00Z",
+          "valid_until": "2026-01-01T15:00:00Z",
+          "max_transaction_count": 10
+        },
+        "signer_key_id": "ed25519:5584637858cfc677"
+      },
+      "signature": "wn4rVATBy8z2G25hct+p7ugh71t9xyavwFVOvOM9YT86gPWHusleHx5JICafqQ6gpMj9G531ttEZrs4F2WYTAw=="
+    }
+  },
+  "33333333-3333-4333-8333-333333333333": {
+    "trace": {
+      "session_id": "33333333-3333-4333-8333-333333333333",
+      "agent_id": "demo-agent-01",
+      "user_id": "demo-user-01",
+      "mandate_id": "20065505-4771-53ee-b8dd-91063439b2d6",
+      "merchant_id": "techbazaar-04",
+      "merchant_category": "electronics",
+      "item_category": "phones",
+      "amount": "1800.00",
+      "currency": "INR",
+      "events": [
+        {
+          "event_type": "intent_captured",
+          "timestamp": "2026-01-01T09:03:12Z",
+          "payload": {}
+        },
+        {
+          "event_type": "mandate_presented",
+          "timestamp": "2026-01-01T09:03:15Z",
+          "payload": {}
+        },
+        {
+          "event_type": "cart_build",
+          "timestamp": "2026-01-01T09:03:19Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_attempt",
+          "timestamp": "2026-01-01T09:03:22Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_result",
+          "timestamp": "2026-01-01T09:03:26Z",
+          "payload": {}
+        }
+      ],
+      "started_at": "2026-01-01T09:03:12Z",
+      "completed_at": "2026-01-01T09:03:26Z"
+    },
+    "signed_mandate": {
+      "mandate": {
+        "mandate_id": "20065505-4771-53ee-b8dd-91063439b2d6",
+        "schema_version": "1.0",
+        "agent_id": "demo-agent-01",
+        "user_id": "demo-user-01",
+        "parent_mandate_id": null,
+        "issued_at": "2026-01-01T08:00:00Z",
+        "expires_at": "2026-01-01T16:00:00Z",
+        "nonce": "144b2435852554818a8b288bc76558ab",
+        "scope": {
+          "max_amount": "5000",
+          "currency": "INR",
+          "allowed_merchant_ids": null,
+          "allowed_merchant_categories": [
+            "electronics"
+          ],
+          "allowed_item_categories": [
+            "phones",
+            "laptops"
+          ],
+          "valid_from": "2026-01-01T08:00:00Z",
+          "valid_until": "2026-01-01T15:00:00Z",
+          "max_transaction_count": 10
+        },
+        "signer_key_id": "ed25519:9d26aecc6e73a1db"
+      },
+      "signature": "8E9EIHfEqNcG+eaQn8lQGQtbJEp0iAbvHi/wUJIhmNBswulOa7cReDcTfMtvlV0+LGqN1KffZrHbGOCHTqvUBw=="
+    }
+  },
+  "44444444-4444-4444-8444-444444444444": {
+    "trace": {
+      "session_id": "44444444-4444-4444-8444-444444444444",
+      "agent_id": "demo-agent-02",
+      "user_id": "demo-user-02",
+      "mandate_id": "d8e0e51b-ec60-541e-996d-344596f859fd",
+      "merchant_id": "trendline-09",
+      "merchant_category": "fashion",
+      "item_category": "apparel",
+      "amount": "950.00",
+      "currency": "INR",
+      "events": [
+        {
+          "event_type": "intent_captured",
+          "timestamp": "2026-01-01T09:00:00Z",
+          "payload": {}
+        },
+        {
+          "event_type": "mandate_presented",
+          "timestamp": "2026-01-01T09:00:02.500000Z",
+          "payload": {}
+        },
+        {
+          "event_type": "cart_build",
+          "timestamp": "2026-01-01T09:00:05Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_attempt",
+          "timestamp": "2026-01-01T09:00:07Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_result",
+          "timestamp": "2026-01-01T09:00:09.500000Z",
+          "payload": {}
+        }
+      ],
+      "started_at": "2026-01-01T09:00:00Z",
+      "completed_at": "2026-01-01T09:00:09.500000Z"
+    },
+    "signed_mandate": {
+      "mandate": {
+        "mandate_id": "d8e0e51b-ec60-541e-996d-344596f859fd",
+        "schema_version": "1.0",
+        "agent_id": "demo-agent-02",
+        "user_id": "demo-user-02",
+        "parent_mandate_id": null,
+        "issued_at": "2026-01-01T07:00:00Z",
+        "expires_at": "2026-01-01T16:00:00Z",
+        "nonce": "0b4af840d6c1534e885801868c2ad621",
+        "scope": {
+          "max_amount": "4000",
+          "currency": "INR",
+          "allowed_merchant_ids": null,
+          "allowed_merchant_categories": [
+            "fashion"
+          ],
+          "allowed_item_categories": [
+            "apparel"
+          ],
+          "valid_from": "2026-01-01T07:00:00Z",
+          "valid_until": "2026-01-01T15:00:00Z",
+          "max_transaction_count": 10
+        },
+        "signer_key_id": "ed25519:4536e2aecaef214d"
+      },
+      "signature": "4DlrqyZk+fNKmhRS57OOC79Yz01qno4R5ERtbWlF//z9Qwd/qhBhaDOYF13fZPZ5ykD8fSBd5iwBLyphPOEqCw=="
+    }
+  },
+  "55555555-5555-4555-8555-555555555555": {
+    "trace": {
+      "session_id": "55555555-5555-4555-8555-555555555555",
+      "agent_id": "demo-agent-00",
+      "user_id": "demo-user-00",
+      "mandate_id": "e2b67289-bc7f-556b-b0b4-3cb63505e3ec",
+      "merchant_id": "freshmart-01",
+      "merchant_category": "grocery",
+      "item_category": "packaged_food",
+      "amount": "500.00",
+      "currency": "INR",
+      "events": [
+        {
+          "event_type": "intent_captured",
+          "timestamp": "2026-01-01T09:02:00Z",
+          "payload": {}
+        },
+        {
+          "event_type": "mandate_presented",
+          "timestamp": "2026-01-01T09:02:18Z",
+          "payload": {}
+        },
+        {
+          "event_type": "catalog_browse",
+          "timestamp": "2026-01-01T09:02:42Z",
+          "payload": {}
+        },
+        {
+          "event_type": "cart_build",
+          "timestamp": "2026-01-01T09:03:02Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_attempt",
+          "timestamp": "2026-01-01T09:03:24Z",
+          "payload": {}
+        },
+        {
+          "event_type": "payment_result",
+          "timestamp": "2026-01-01T09:03:41Z",
+          "payload": {}
+        }
+      ],
+      "started_at": "2026-01-01T09:02:00Z",
+      "completed_at": "2026-01-01T09:03:41Z"
+    },
+    "signed_mandate": {
+      "mandate": {
+        "mandate_id": "e2b67289-bc7f-556b-b0b4-3cb63505e3ec",
+        "schema_version": "1.0",
+        "agent_id": "demo-agent-00",
+        "user_id": "demo-user-00",
+        "parent_mandate_id": null,
+        "issued_at": "2026-01-01T08:30:00Z",
+        "expires_at": "2026-01-01T15:00:00Z",
+        "nonce": "9a07289c8f9b57719335d21d7ed228ab",
+        "scope": {
+          "max_amount": "3000",
+          "currency": "INR",
+          "allowed_merchant_ids": null,
+          "allowed_merchant_categories": [
+            "grocery"
+          ],
+          "allowed_item_categories": [
+            "packaged_food"
+          ],
+          "valid_from": "2026-01-01T08:30:00Z",
+          "valid_until": "2026-01-01T15:00:00Z",
+          "max_transaction_count": 10
+        },
+        "signer_key_id": "ed25519:5584637858cfc677"
+      },
+      "signature": "wvkYSy4bA3Q5ZNUAFWlP1jJqNRH2OfS7PIZ1FyQMUJ856KoL/vCwRzC3zTEX3zDrU79Y2qB1KDlaS9wDlPL4Dw=="
+    }
+  }
+}

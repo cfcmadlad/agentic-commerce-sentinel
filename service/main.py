@@ -43,6 +43,7 @@ from features.session import feature_names
 from mandate.verification import verify_mandate
 from reasoning.narrate import build_narration_input, narrate
 from reasoning.schema import AuditRecord
+from service.demo_seed import seed_demo_history
 from service.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from service.schemas import (
     AttributionRowOut,
@@ -88,6 +89,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         Control back to FastAPI for the process's serving lifetime.
     """
     app.state.app_state = build_app_state()
+    seed_demo_history(app.state.app_state)
     yield
 
 

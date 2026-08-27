@@ -390,7 +390,7 @@ It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this w
 
 ## 9. What's not built yet, and why
 
-**Frontend live demo, wiring only.** The metrics dashboard is real and complete — a static page rendering `frontend/public/metrics.json`, produced directly by `run_milestone_b.py --json-out`, so every number on it traces back to the same evaluation this document does. The live demo view, sandbox, and the two data-exploration views are all built and run against real data (a fixture export mirroring the real Layer 1-4 contract types for the demo view; real per-session scores and features for the others; a faithful client-side port of Layer 2's own rules for the sandbox). The one thing genuinely left is wiring the live demo view to the now-real API service (§4) in place of its fixture export — a data-source swap, not new logic.
+**Live demo hosted publicly against a live API, not done.** The frontend's live demo view genuinely calls the real API service (§4) when a `VITE_API_BASE_URL` is configured — real signed requests, a real running pipeline, real accumulated agent history seeded once at startup (`service/demo_seed.py`) — verified end to end against a local instance. What is not done is standing that API service up as a public, continuously running deployment: that is a different risk profile from hosting the static frontend (a real process, a Groq secret to manage, a model-fit cold start on every restart) and remains a deliberate, separate decision. The publicly hosted frontend therefore still falls back to its original static fixtures, unchanged in behavior from before the live wiring existed.
 
 **Docker build for the API service, untested end to end.** The Dockerfile is written to the same install steps already verified working on a bare machine, but has not itself been built and run in a container in this project's own development environment. Flagged here rather than silently assumed to work.
 
@@ -444,18 +444,24 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
               append-only audit log (audit_log.py)
 /service      FastAPI service wrapping the full pipeline
               (main.py, schemas.py, state.py, middleware.py, Dockerfile)
+                demo_scenarios.py   five fixed live-demo request bodies, real
+                                    signed mandates, deterministic across processes
+                demo_seed.py        replays warm-up history through decide() at startup
 /frontend     web frontend — metrics dashboard (static export), live demo
-              view (fixture-driven, not yet wired to /service), a sandbox
-              running a real client-side port of Layer 2's rules, and two
-              real-data explorations of the model's own scores and features
+              view (wired to a live, configured API service, falls back to
+              fixtures otherwise), a sandbox running a real client-side port
+              of Layer 2's rules, and two real-data explorations of the
+              model's own scores and features
 /docs/adr     architecture decision records
-tests/        443 tests, covering every layer above
+tests/        444 tests, covering every layer above
 run_gate.py             command-line entry point for the rules-baseline evaluation
 run_milestone_a.py      command-line entry point for the Layer 3 pipeline
 run_milestone_b.py      command-line entry point for the full evaluation
 run_held_out_eval.py    command-line entry point for the held-out class evaluation
 run_collision_export.py exports real per-session scores/features for the
                         frontend's data-exploration views
+run_live_demo_export.py exports the live demo's five real signed request
+                        bodies for the frontend to POST against a running service
 EXCEPTIONS.md           named categories of sessions this system cannot
                         confidently classify, each reproducible from the
                         evaluation commands above
@@ -469,7 +475,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 443 passed
+pytest -q                                              # expect: 444 passed
 ruff check .                                           # expect: All checks passed!
 mypy mandate common generator detect features eval tests reasoning service   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
@@ -490,6 +496,8 @@ docker run -p 8000:8000 --env-file .env sentinel-service
 ```
 
 Startup pays the same cost as `run_milestone_a.py` (fitting Layer 3 against the same corpus), so the first request after boot takes tens of seconds. Interactive API docs are served at `/docs` once it's up.
+
+To have the frontend's live demo view call this running service instead of its fixture fallback, set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env.local` (gitignored) before `npm run dev`. `frontend/public/live_demo_requests.json` (the five real, pre-signed request bodies it POSTs) is committed and regenerated with `python run_live_demo_export.py`, which only needs `service/demo_scenarios.py`'s pure builder, not a running service.
 
 `run_milestone_b.py` is the one that produces every number in [§7](#7-evaluation-results) up to the held-out result. It takes several minutes, most of it in the sensitivity grid, which regenerates the corpus and retrains the model thirteen times over. `--skip-sensitivity` cuts that for iteration and prints a warning saying the resulting report is incomplete.
 

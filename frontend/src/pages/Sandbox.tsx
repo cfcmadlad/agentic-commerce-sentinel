@@ -86,6 +86,15 @@ export default function Sandbox() {
   return (
     <>
       <div className="panel">
+        <div className="page-intro">
+          <span className="page-intro__eyebrow">New here?</span>
+          <p>
+            A "mandate" is what a human authorizes an AI shopping agent to spend, and on what — a
+            ceiling, a set of categories, a time window. Build one on the left, then try to sneak a
+            transaction past it on the right. Every rule here is the real one this system enforces,
+            ported line for line, not a simplified stand-in.
+          </p>
+        </div>
         <h2 className="section-title">Build a mandate. Try to break it.</h2>
         <p className="section-note">
           This runs the same six scope rules Layer 2 runs in production — exact comparisons, no

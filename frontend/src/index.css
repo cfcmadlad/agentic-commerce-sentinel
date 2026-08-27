@@ -226,10 +226,21 @@ code {
 /* ---------- Hero ---------- */
 
 .hero {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
   padding: 88px 24px 56px;
   text-align: center;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.hero__eyebrow,
+.hero__title,
+.hero__subtitle,
+.hero__actions {
+  position: relative;
+  z-index: 1;
 }
 
 .hero__eyebrow {
@@ -354,38 +365,111 @@ code {
   line-height: 1.5;
 }
 
-/* ---------- Accent card: the system's one permitted spot of color ---------- */
+/* ---------- Live finding: the system's one permitted spot of color, now data instead of a quote ---------- */
 
-.accent-card {
+.live-finding {
   background: var(--accent-bg);
   color: var(--accent-ink);
   border-radius: var(--radius-card);
-  padding: 44px 48px;
-  max-width: 620px;
+  padding: 40px 44px;
+  max-width: var(--page-max);
   margin: 72px auto;
-  text-align: center;
-  transform: rotate(-0.5deg);
+  display: grid;
+  grid-template-columns: minmax(240px, 380px) 1fr;
+  gap: 40px;
+  align-items: center;
 }
 
-.accent-card__quote {
+.live-finding__title {
   font-family: var(--font-serif);
-  font-style: italic;
   font-weight: 400;
-  font-size: clamp(1.2rem, 2.5vw, 1.6rem);
-  line-height: 1.5;
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  line-height: 1.3;
   letter-spacing: -0.01em;
+  margin: 10px 0 14px;
 }
 
-.accent-card__byline {
-  margin-top: 20px;
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.accent-card__byline a {
+.live-finding__body {
+  font-size: 14.5px;
+  line-height: 1.65;
   color: var(--accent-ink);
+  opacity: 0.85;
+}
+
+.live-finding .section__eyebrow {
+  color: var(--accent-ink);
+  opacity: 0.7;
+}
+
+.mini-collide {
+  background: var(--paper);
+  border-radius: var(--radius-card-elevated);
+  box-shadow: var(--shadow-float);
+  padding: 20px 22px;
+  color: var(--ink);
+}
+
+.mini-collide__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--smoke);
+}
+
+.mini-collide__intro {
+  font-size: 13px;
+  color: var(--slate);
+  margin: 6px 0 12px;
+  line-height: 1.5;
+}
+
+.mini-collide__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+}
+
+.mini-collide__stats {
+  display: flex;
+  gap: 28px;
+  margin-top: 12px;
+}
+
+.mini-collide__stat-value {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.mini-collide__stat-value--accent {
+  color: #c25b2c;
+}
+
+.mini-collide__stat-label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--slate);
+  margin-top: 2px;
+}
+
+.mini-collide__cta {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .live-finding {
+    grid-template-columns: 1fr;
+    padding: 28px 24px;
+  }
 }
 
 /* ---------- Landing sections ---------- */
@@ -448,11 +532,63 @@ code {
   padding: 28px 24px;
 }
 
+.layer-card__icon {
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
 .layer-card__index {
   font-family: var(--font-serif);
   font-size: 26px;
   color: var(--slate);
   margin-bottom: 16px;
+}
+
+.flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 40px;
+}
+
+.flow-strip__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flow-strip__node {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+
+.flow-strip__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--slate);
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.flow-strip__arrow {
+  color: var(--smoke);
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+@media (max-width: 640px) {
+  .flow-strip__label {
+    display: none;
+  }
 }
 
 .layer-card__title {
@@ -466,6 +602,102 @@ code {
   font-size: 14px;
   line-height: 1.6;
   color: var(--slate);
+}
+
+.guide-card {
+  display: block;
+  text-decoration: none;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.guide-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-popover);
+}
+
+.guide-card__cta {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- Ambient data backdrop: decorative, built from real scores ---------- */
+
+.data-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.08;
+}
+
+/* ---------- Reading list ---------- */
+
+.reading-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.reading-list__item {
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+}
+
+.reading-list__label {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+a.reading-list__label {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a.reading-list__label:hover {
+  color: var(--slate);
+}
+
+.reading-list__detail {
+  font-size: 13.5px;
+  color: var(--slate);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ---------- Page intro: newcomer-facing framing at the top of a data page ---------- */
+
+.page-intro {
+  background: var(--mist);
+  border-radius: var(--radius-card-sm);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+
+.page-intro__eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--smoke);
+  margin-bottom: 6px;
+}
+
+.page-intro p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--slate);
+  margin: 0;
 }
 
 .closing {

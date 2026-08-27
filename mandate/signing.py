@@ -70,6 +70,21 @@ def canonical_bytes(mandate: Mandate) -> bytes:
         left to that path rather than handled in `_json_default`.
     """
     payload = mandate.model_dump(mode="json")
+    scope = payload["scope"]
+    # `MandateScope`'s three `frozenset[str]` fields serialize to a JSON
+    # array in whatever order the frozenset happens to iterate in -- which
+    # depends on Python's per-process hash randomization (`PYTHONHASHSEED`),
+    # not on the set's content. A mandate signed by one process and verified
+    # by another (the ordinary case: a client signs, a separate server
+    # verifies) would otherwise compute different canonical bytes for the
+    # exact same mandate and fail verification nondeterministically,
+    # depending only on which two processes happened to draw matching or
+    # differing hash seeds. Sorting makes the array order a function of the
+    # set's contents alone.
+    scope["allowed_merchant_categories"] = sorted(scope["allowed_merchant_categories"])
+    scope["allowed_item_categories"] = sorted(scope["allowed_item_categories"])
+    if scope["allowed_merchant_ids"] is not None:
+        scope["allowed_merchant_ids"] = sorted(scope["allowed_merchant_ids"])
     canonical = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), default=_json_default
     )

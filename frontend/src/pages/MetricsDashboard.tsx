@@ -84,6 +84,15 @@ export default function MetricsDashboard() {
   return (
     <>
       <div className="panel">
+        <div className="page-intro">
+          <span className="page-intro__eyebrow">New here?</span>
+          <p>
+            This is the full, unedited report card from evaluating the system against synthetic
+            attacks — how often it catches something bad ("recall"), how often it wrongly blocks
+            something fine ("precision"), and whether that's a real, statistically significant
+            improvement over simple rules alone ("hard gate," below) rather than a coincidence.
+          </p>
+        </div>
         <h2 className="section-title">Hard gate: does Layer 3 earn its place?</h2>
         <p style={{ margin: "2px 0 10px" }}>
           <span className={`badge ${gate.layer3_earns_its_place ? "badge--allow" : "badge--block"}`}>

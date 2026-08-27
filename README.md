@@ -59,7 +59,7 @@ Three detection layers feed a reasoning/audit layer:
 | **1. Mandate verification** | Is the agent's signed authorization genuine, unexpired, bound to this agent's registered key, and not already used up? | **Built** |
 | **2. Scope enforcement** | Does this specific transaction — amount, merchant, item category, timing — fit inside what the mandate actually authorizes? | **Built** |
 | **3. Behavioral anomaly detection** | Does this agent's session look like the agent it claims to be, based on patterns the first two layers structurally cannot see? | **Built** |
-| **4. Reasoning & audit** | Given the deterministic and learned layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the earlier layers already decided. | **Not yet built** |
+| **4. Reasoning & audit** | Given the deterministic and learned layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the earlier layers already decided. | **Built** |
 
 Every decision the finished system makes writes an append-only audit record, and every block is designed to be human-reviewable. This is a **detector and verifier**, not an autonomous enforcement system — see [§10](#10-defense-only-by-design) for why that's a hard constraint here, not a nicety.
 
@@ -84,9 +84,7 @@ flowchart TD
     L3["Layer 3 — Behavioral anomaly detection\ngradient-boosted model over causal features"] -->|score below threshold| L4
     L3 -->|score at or above threshold| ESC["Escalate to human review"]
 
-    L4["Layer 4 — Reasoning & audit log\nnarrates the decision, never overrides it\n(not yet built)"] --> OUT["Authorization proceeds"]
-
-    style L4 stroke-dasharray: 5 5
+    L4["Layer 4 — Reasoning & audit log\nnarrates the decision, never overrides it"] --> OUT["Authorization proceeds"]
 ```
 
 ## 4. What's built, and how it works
@@ -141,7 +139,7 @@ Four modules, each with a narrow job:
 - **`behavioral.py`** — a gradient-boosted classifier trained *only* on the residual set: sessions the rules-only baseline already let through. This is the property that keeps the model's reported performance honest — it never gets credit for re-catching an attack Layers 1 and 2 already catch, because it never sees those sessions during training. Training uses a chronological split (train / validation / test, in time order, never shuffled), with hard gates on minimum row counts and minimum positive-class size so the model fails loudly on too little data rather than fitting anyway.
 - **`calibration.py`** — turns the model's raw score into a block/allow decision. The threshold is chosen to minimize expected cost under an explicit, named, documented false-negative-to-false-positive cost ratio (`DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO`), rather than picked by eyeballing a precision/recall tradeoff. That ratio is a stated assumption, not measured data — no real fraud-loss or support-cost figures exist for a synthetic-data submission — so the module also produces a sensitivity sweep across a range of plausible ratios, reporting how much the chosen threshold would move if the assumption were wrong.
 - **`ensemble.py`** — combines the Layer 1/2 verdict with the Layer 3 score under the one-directional rule described in [§3](#3-architecture): rules can add a block, never remove one.
-- **`attribution.py`** — SHAP feature attribution, both a global ranking (which features matter most on average) and a per-session breakdown (which features drove one specific score). The per-session breakdown is what the reasoning layer will eventually narrate from.
+- **`attribution.py`** — SHAP feature attribution, both a global ranking (which features matter most on average) and a per-session breakdown (which features drove one specific score). The per-session breakdown is what the reasoning layer (§4, below) narrates from.
 
 ### Evaluation and significance testing (`/eval`)
 
@@ -158,6 +156,26 @@ One structural wrinkle in comparing these two systems is documented rather than 
 ### Held-out evaluation (`generator/attacks/held_out.py`, `eval/held_out_evaluation.py`)
 
 Two modules exist solely to run the held-out class described in [§6](#6-attack-taxonomy) through the already-frozen pipeline above, exactly once. `generator/attacks/held_out.py` builds a corpus containing only mandate-chaining attacks; `generator.attacks.corpus` (the training/tuning path) never imports it, a guarantee checked at the AST level rather than left to convention. `eval/held_out_evaluation.py` takes an already-`fit_pipeline`'d model and threshold and scores the held-out corpus against them verbatim — it retrains nothing and recalibrates nothing, and reports a per-variant recall breakdown plus a failure-mode split (whether a missed session's score was indistinguishable from ordinary traffic, or merely elevated-but-insufficient). Result and full reasoning: [§7](#7-evaluation-results) and `docs/adr/0003-held-out-class-evaluation.md`.
+
+### Reasoning and audit (Layer 4, `/reasoning`)
+
+Three modules, each with a narrow job, matching the split already established for Layers 1-3:
+
+- **`schema.py`** — the pure data definitions: `NarrationInput` (what the layer is given), `Narration` (what it produces), and `AuditRecord` (what gets persisted). Neither `NarrationInput` nor `Narration` carries a field of any `detect/` decision type, which is what makes the non-mutation guarantee structural rather than conventional — there is no field for a verdict to be written back into, even by accident.
+- **`narrate.py`** — consumes an already-decided `BaselineDecision`, `EnsembleDecision`, and (when available) a per-session SHAP breakdown, and produces a plain-language explanation via Groq (`openai/gpt-oss-120b`, chosen by querying the live model list for this project's account rather than assumed from documentation). The verdict a narration reports is derived once, directly from the frozen input, before the LLM is ever called — never parsed back out of the model's response, so nothing the model says can change what gets reported as the decision. This is checked two ways: a direct test that the output type has no field a verdict could be written into, and an AST-level test that this module never imports `detect.calibration` or `detect.behavioral` at all, so it has no way to touch a threshold or a score even if it wanted to — the same discipline `features/session.py` already uses to guarantee label isolation.
+- **`audit_log.py`** — an append-only JSONL store. Append-only by interface, not by convention: the class exposes exactly `append` and `read_all`, and no delete, update, or clear method exists anywhere on it.
+
+**Determinism, stated plainly rather than assumed.** This project's standing rule is full reproducibility from a seed, and an LLM's prose cannot meet that bar — the same prompt at temperature 0 is not guaranteed byte-identical across a provider's own model updates. What *is* deterministic, and tested for exact equality: the structured input built for one session, and the fact that a score or verdict is never touched. The narrative text itself is tested on structural properties — does it cite the real rule and feature names it was given, does the reported verdict match its input — never on exact string equality against a golden narrative.
+
+**Adversarial-prompt resistance**, tested rather than assumed. `merchant_id`, `merchant_category`, and `item_category` are nominally free text — the type places no constraint on them beyond being strings, even though every generator only ever populates them from a fixed catalog. Six payload types were injected into these fields and run against the real model: a direct instruction override, a fake `SYSTEM:` line, a request to leak the system prompt, fake closing delimiters, a role-play jailbreak, and a Cyrillic-homoglyph variant of the direct override. Each was tested twice — once against a well-behaved response, once against a fake client that actively tries to comply with whatever it reads — and the reported verdict never moved in either case, because it is derived from the frozen input, not the model's text. Full payload set and reasoning: `tests/test_prompt_injection_resistance.py`.
+
+### API service (`/service`)
+
+A FastAPI service wrapping the full four-layer pipeline behind five endpoints: `POST /sessions/decide` (submit a session trace and a signed mandate, get the complete decision — baseline, ensemble, attribution, narrative — back), `GET /audit/{session_id}`, `POST /agents/register`, `GET /agents/demo` (a handful of deterministically keyed agents registered at startup, private keys included in the response — safe specifically because they are re-derivable from a public seed string by anyone who reads the source, not real secrets, in a project where every session is synthetic and defense-only), and `GET /health`.
+
+The request body reuses `SessionTrace` and `SignedMandate` directly rather than a parallel schema, since both are already the real internal types; the response schema is written explicitly field-by-field from the real decision dataclasses, the same convention `eval/report_json.py` already established for the metrics export, for the same reason — several fields (enum members) are not JSON-safe as-is. Layer 3 is fit once at startup against the identical 20,000-session corpus this document's own evaluation numbers come from, not a separately trained or pickled artifact.
+
+Narration is best-effort at the service boundary the same way it is everywhere else in this project: if no Groq key is configured, `narrative` comes back `null`, but a real audit record is still appended for every decision, with an honest placeholder stating narration was unavailable rather than a fabricated explanation. Rate limiting and request logging are hand-rolled middleware — a few dozen lines each — rather than a new dependency for something this small. An unhandled exception is always mapped to a generic message with the real error logged server-side, never surfaced to the caller as a stack trace.
 
 ## 5. Synthetic data: how it's generated and why it can be trusted
 
@@ -370,15 +388,15 @@ It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this w
 
 ## 9. What's not built yet, and why
 
-**Reasoning and audit layer (Layer 4).** Will consume the structured output of Layers 1–3 (including Layer 3's SHAP attribution and the held-out result in [§7](#7-evaluation-results)) and produce a plain-language explanation of each decision — never a score, and never able to override what the earlier layers decided. Deliberately built after Layer 3 and the held-out evaluation, because a narration layer over a behavioral score that didn't exist yet would be narrating nothing, and because the held-out result is real content for it to be able to explain honestly ("no layer currently checks a mandate against its parent's authority").
+**Frontend live demo, wiring only.** The metrics dashboard is real and complete — a static page rendering `frontend/public/metrics.json`, produced directly by `run_milestone_b.py --json-out`, so every number on it traces back to the same evaluation this document does. The live demo view, sandbox, and the two data-exploration views are all built and run against real data (a fixture export mirroring the real Layer 1-4 contract types for the demo view; real per-session scores and features for the others; a faithful client-side port of Layer 2's own rules for the sandbox). The one thing genuinely left is wiring the live demo view to the now-real API service (§4) in place of its fixture export — a data-source swap, not new logic.
 
-**API service.** A FastAPI wrapper around the full pipeline is planned but not started.
+**Docker build for the API service, untested end to end.** The Dockerfile is written to the same install steps already verified working on a bare machine, but has not itself been built and run in a container in this project's own development environment. Flagged here rather than silently assumed to work.
 
-**Frontend.** Scaffolded, not finished. The metrics dashboard is real and complete — a static page rendering `frontend/public/metrics.json`, produced directly by `run_milestone_b.py --json-out`, so every number on it traces back to the same evaluation this document does. The live demo view exists as a working shell (session picker, four-layer pipeline visualization, SHAP attribution bars) driven by fixture data, since it has no API service to call yet; wiring it to the real service, and building the narration panel it already reserves space for, are what remain. An MCP connector, and the frontend's original three-view design, were both cut from scope to keep the evaluation rigor in §7 from being the thing that got shortened under deadline pressure instead.
+**MCP connector**, and the frontend's original three-view design, were both cut from scope to keep the evaluation rigor in §7 from being the thing that got shortened under deadline pressure instead.
 
 ## 10. Defense-only, by design
 
-This project is a **detector and verifier**, not an enforcement or offensive system, at every layer including the ones not yet built. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Layer 3's model is trained and evaluated the same way: it only ever adds a block on top of what Layers 1 and 2 already allow, and it cannot override a deterministic rejection. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
+This project is a **detector and verifier**, not an enforcement or offensive system, at every layer. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Layer 3's model is trained and evaluated the same way: it only ever adds a block on top of what Layers 1 and 2 already allow, and it cannot override a deterministic rejection. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
 
 ## 11. Known limitations, stated plainly
 
@@ -389,6 +407,8 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 **Two assumptions drive reported numbers and neither is measured.** The 10:1 false-negative-to-false-positive cost ratio sets the operating threshold (§4, §7); the cost sweep varies it from 1:1 to 30:1 so its leverage is visible rather than hidden. And the sensitivity grid varies one factor at a time, so it isolates which single parameter the result is most fragile to but cannot see interactions between two moving together.
 
 **This system has no representation of mandate delegation as a chain.** Every check in Layers 1–3 reasons about one mandate, or one session against one mandate, in isolation — none of them compare a mandate's authority to its parent's. [§7](#7-evaluation-results)'s held-out result measures the direct consequence: 0.88% recall on mandate-chaining / privilege-escalation attacks, against 99.76% on the three classes this project does check for. This is not a tuning gap that more data or a different threshold would close — it is an architectural one, and closing it (a chain-aware Layer 2 check, or parent-relative Layer 3 features) is real, undone work, not a rounding error in an otherwise-complete system.
+
+**Layer 4's narrative text is not reproducible the way every number elsewhere in this document is.** This project's standing rule is full reproducibility from a seed; an LLM's prose cannot meet that bar even at temperature 0, across a provider's own model updates least of all. What *is* reproducible and tested for exact equality is the structured input built for one decision and the fact that Layer 4 never touches a score or a verdict — see `/reasoning`'s own module docstrings for the full reasoning. Treat the narrative as an explanation of a reproducible decision, not as a reproducible artifact itself.
 
 ## 12. Repository structure
 
@@ -416,17 +436,22 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
                 milestone_b.py        the complete evaluation and its gate verdict
                 held_out_evaluation.py the one-shot held-out class result
                 report_json.py        JSON export for the static dashboard
-/reasoning    reasoning/audit layer (not yet implemented)
-/service      API service (not yet implemented)
-/frontend     web frontend — metrics dashboard complete (static export),
-              live demo view scaffolded against fixture data, not yet
-              wired to a real API service
+/reasoning    Layer 4: narration (schema.py, narrate.py, Groq-backed),
+              append-only audit log (audit_log.py)
+/service      FastAPI service wrapping the full pipeline
+              (main.py, schemas.py, state.py, middleware.py, Dockerfile)
+/frontend     web frontend — metrics dashboard (static export), live demo
+              view (fixture-driven, not yet wired to /service), a sandbox
+              running a real client-side port of Layer 2's rules, and two
+              real-data explorations of the model's own scores and features
 /docs/adr     architecture decision records
-tests/        364 tests, covering every layer above that's built
-run_gate.py           command-line entry point for the rules-baseline evaluation
-run_milestone_a.py    command-line entry point for the Layer 3 pipeline
-run_milestone_b.py    command-line entry point for the full evaluation
-run_held_out_eval.py  command-line entry point for the held-out class evaluation
+tests/        443 tests, covering every layer above
+run_gate.py             command-line entry point for the rules-baseline evaluation
+run_milestone_a.py      command-line entry point for the Layer 3 pipeline
+run_milestone_b.py      command-line entry point for the full evaluation
+run_held_out_eval.py    command-line entry point for the held-out class evaluation
+run_collision_export.py exports real per-session scores/features for the
+                        frontend's data-exploration views
 ```
 
 ## 13. Running this yourself
@@ -437,14 +462,27 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 364 passed
+pytest -q                                              # expect: 443 passed
 ruff check .                                           # expect: All checks passed!
-mypy mandate common generator detect features eval tests   # expect: Success: no issues found
+mypy mandate common generator detect features eval tests reasoning service   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 python run_milestone_a.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
 python run_milestone_b.py --n-legitimate 20000 --seed 42   # the full evaluation
 python run_held_out_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042   # the held-out class result
 ```
+
+Seven of the tests exercise Layer 4's live Groq call and are skipped unless `GROQ_API_KEY` is set (copy `.env.example` to `.env` and fill in a key from [console.groq.com/keys](https://console.groq.com/keys) — the rest of the suite, and the detection pipeline itself, works identically without one; narration alone degrades to a stated placeholder, see §4).
+
+Running the API service:
+
+```bash
+uvicorn service.main:app --reload
+# or, from a container:
+docker build -f service/Dockerfile -t sentinel-service .
+docker run -p 8000:8000 --env-file .env sentinel-service
+```
+
+Startup pays the same cost as `run_milestone_a.py` (fitting Layer 3 against the same corpus), so the first request after boot takes tens of seconds. Interactive API docs are served at `/docs` once it's up.
 
 `run_milestone_b.py` is the one that produces every number in [§7](#7-evaluation-results) up to the held-out result. It takes several minutes, most of it in the sensitivity grid, which regenerates the corpus and retrains the model thirteen times over. `--skip-sensitivity` cuts that for iteration and prints a warning saying the resulting report is incomplete.
 
@@ -454,6 +492,7 @@ The metrics dashboard reads `frontend/public/metrics.json`, regenerated with:
 
 ```bash
 python run_milestone_b.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
+python run_collision_export.py --json-out frontend/public/collision.json
 cd frontend && npm install && npm run dev
 ```
 

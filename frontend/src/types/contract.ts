@@ -1,16 +1,19 @@
 /**
  * API contract for the Sentinel decision pipeline.
  *
- * Layers 1-3 mirror real backend types exactly:
- *   - BaselineDecision  <- detect/baseline.py
- *   - EnsembleDecision  <- detect/ensemble.py
- *   - AttributionRow    <- detect/attribution.py (explain_row)
+ * All four layers mirror real backend types exactly:
+ *   - BaselineDecision    <- detect/baseline.py
+ *   - EnsembleDecision    <- detect/ensemble.py
+ *   - AttributionRow      <- detect/attribution.py (explain_row)
+ *   - ReasoningNarrative  <- reasoning/schema.py::Narration
  *
- * Layer 4 (reasoning/audit) has no implementation yet -- Milestone D is not
- * built. ReasoningNarrative below is a deliberate placeholder: its shape is
- * a guess, not a frozen contract. When Milestone D lands, only this one
- * type and whatever reads it should need to change; every other type here
- * is load-bearing today and should not need to move.
+ * There is still no live API service (Milestone E) for this frontend to
+ * call -- every value rendered by the live demo view comes from
+ * `mock/sessions.ts`, not a `fetch(...)`. The fixtures were produced by
+ * actually running `reasoning.narrate.narrate()` against the real Groq API
+ * for each mock session's real Baseline/Ensemble/Attribution data (see the
+ * comment in `mock/sessions.ts`), not written by hand, so the narrative
+ * text is genuine model output, not placeholder prose.
  */
 
 export type VerificationFailureReason =
@@ -59,14 +62,18 @@ export interface AttributionRow {
 }
 
 /**
- * PLACEHOLDER -- Milestone D is not built. Shape is a guess for frontend
- * scaffolding purposes only; do not treat as frozen. Never sets or adjusts
- * blocked/behavioral_score -- narration only, per the project's standing
- * constraint that Layer 4 cannot override earlier layers.
+ * Mirrors reasoning/schema.py::Narration. Never carries a `blocked` or
+ * `behavioral_score` field -- narration only, structurally unable to
+ * override what Layers 1-3 already decided (see reasoning/narrate.py's
+ * module docstring for the non-mutation guarantee this mirrors).
  */
 export interface ReasoningNarrative {
-  summary: string;
-  cited_checks: string[];
+  session_id: string;
+  verdict_summary: string;
+  narrative: string;
+  rule_citations: string[];
+  feature_citations: string[];
+  model: string;
   generated_at: string;
 }
 
@@ -76,6 +83,6 @@ export interface SessionDecisionResponse {
   baseline: BaselineDecision;
   ensemble: EnsembleDecision;
   attribution: AttributionRow[] | null;
-  /** Null until Milestone D exists. The UI must render this as "not yet available", not omit the section. */
+  /** Null only for a session that was never narrated. Every fixture below has one. */
   narrative: ReasoningNarrative | null;
 }

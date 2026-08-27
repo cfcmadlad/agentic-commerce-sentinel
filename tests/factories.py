@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from common.schema import EventType, SessionEvent, SessionTrace
 from mandate.schema import Mandate, MandateScope
 from mandate.signing import key_id_for_public_key
 
@@ -75,6 +76,35 @@ def build_mandate(
     }
     defaults.update(overrides)
     return Mandate(**defaults)  # type: ignore[arg-type]
+
+
+def build_session_trace(**overrides: object) -> SessionTrace:
+    """Builds a minimally valid `SessionTrace` with sensible defaults.
+
+    Args:
+        **overrides: Field values to override the defaults with. Passing
+            `events` replaces the default single-event lifecycle entirely.
+
+    Returns:
+        A valid `SessionTrace`.
+    """
+    default_event = SessionEvent(event_type=EventType.PAYMENT_RESULT, timestamp=REFERENCE_NOW)
+    defaults: dict[str, object] = {
+        "session_id": uuid4(),
+        "agent_id": "agent-grocery-bot-01",
+        "user_id": "user-0001",
+        "mandate_id": uuid4(),
+        "merchant_id": "bigbasket",
+        "merchant_category": "grocery",
+        "item_category": "packaged_food",
+        "amount": Decimal("450.00"),
+        "currency": "INR",
+        "events": [default_event],
+        "started_at": REFERENCE_NOW,
+        "completed_at": REFERENCE_NOW,
+    }
+    defaults.update(overrides)
+    return SessionTrace(**defaults)  # type: ignore[arg-type]
 
 
 def random_uuid() -> UUID:

@@ -17,6 +17,13 @@ dependencies = [
     # SHAP attribution for the behavioral layer; pulls numba, pandas and
     # cloudpickle into the closure, all pinned in requirements-lock.txt.
     "shap==0.52.0",
+    # Groq client for Layer 4 (reasoning/narration); pulls httpx, anyio,
+    # distro, sniffio, certifi into the closure, all pinned in
+    # requirements-lock.txt.
+    "groq==1.7.0",
+    # Milestone E: the API service wrapping the full pipeline.
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
 ]
 
 [project.optional-dependencies]
@@ -24,16 +31,21 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.4",
     "mypy==2.3.1",
+    # Loads GROQ_API_KEY (and any other local secret) from a gitignored
+    # .env file for local test runs (see tests/conftest.py). Dev-only: a
+    # real deployment (Milestone E's API service) sets environment
+    # variables through its own runtime, not a checked-out .env file.
+    "python-dotenv==1.2.3",
 ]
-# Reasoning, service, and dashboard dependencies are added when those
-# modules are implemented, not pinned speculatively now.
+# The dashboard is a static export with no server-side dependencies of its
+# own (see frontend/); nothing further is pinned speculatively here.
 
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*"]
+include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*"]
 
 [tool.ruff]
 line-length = 120
@@ -48,6 +60,13 @@ ignore = ["D203", "D213"]  # conflicting docstring formatting rules, pick one st
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's own dependency-injection idiom is `param: T = Depends(...)` in a
+# function signature's default position -- indistinguishable from the real
+# mutable-default-argument bug B008 exists to catch, so these specific
+# calls are declared immutable rather than suppressing the rule file-wide.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header"]
 
 [tool.mypy]
 # Pinned to 3.12, not the 3.11 floor in requires-python, because numpy

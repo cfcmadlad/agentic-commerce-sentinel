@@ -85,8 +85,10 @@ export default function MetricsDashboard() {
     <>
       <div className="panel">
         <h2 className="section-title">Hard gate: does Layer 3 earn its place?</h2>
-        <p style={{ fontSize: "1.1rem", fontWeight: 600, color: gate.layer3_earns_its_place ? "var(--success)" : "var(--danger)" }}>
-          {gate.layer3_earns_its_place ? "YES" : "NO — drop Layer 3"}
+        <p style={{ margin: "2px 0 10px" }}>
+          <span className={`badge ${gate.layer3_earns_its_place ? "badge--allow" : "badge--block"}`}>
+            {gate.layer3_earns_its_place ? "yes" : "no — drop Layer 3"}
+          </span>
         </p>
         <p className="section-note">{gate.rationale}</p>
       </div>
@@ -165,13 +167,20 @@ export default function MetricsDashboard() {
         </p>
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={costChartData}>
-            <CartesianGrid stroke="#232838" />
-            <XAxis dataKey="threshold" stroke="#8b93a7" fontSize={11} />
-            <YAxis stroke="#8b93a7" fontSize={11} />
-            <Tooltip contentStyle={{ background: "#131722", border: "1px solid #232838" }} />
+            <CartesianGrid stroke="#ececec" />
+            <XAxis dataKey="threshold" stroke="#777b86" fontSize={11} />
+            <YAxis stroke="#777b86" fontSize={11} />
+            <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="blocked_legit_per_10k" name="blocked legit / 10k" stroke="#ff5b6e" dot={false} />
-            <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#f5b95a" dot={false} />
+            <Line
+              type="monotone"
+              dataKey="blocked_legit_per_10k"
+              name="blocked legit / 10k"
+              stroke="#777b86"
+              strokeDasharray="4 3"
+              dot={false}
+            />
+            <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#17191c" dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -191,13 +200,13 @@ export default function MetricsDashboard() {
               layout="vertical"
               margin={{ left: 100 }}
             >
-              <CartesianGrid stroke="#232838" />
-              <XAxis type="number" domain={[0, 1]} stroke="#8b93a7" fontSize={11} />
-              <YAxis type="category" dataKey="name" stroke="#8b93a7" fontSize={10} width={140} />
-              <Tooltip contentStyle={{ background: "#131722", border: "1px solid #232838" }} />
+              <CartesianGrid stroke="#ececec" />
+              <XAxis type="number" domain={[0, 1]} stroke="#777b86" fontSize={11} />
+              <YAxis type="category" dataKey="name" stroke="#777b86" fontSize={10} width={140} />
+              <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
               <Bar dataKey="ensemble_auc_pr" name="ensemble AUC-PR">
                 {[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes].map((o) => (
-                  <Cell key={o.name} fill={o.beats_baseline ? "#3ddc97" : "#ff5b6e"} />
+                  <Cell key={o.name} fill={o.beats_baseline ? "#d8d9db" : "#17191c"} />
                 ))}
               </Bar>
             </BarChart>

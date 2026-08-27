@@ -7,9 +7,10 @@ import type { SessionDecisionResponse } from "../types/contract";
  *
  * Reads from the mock fixture module, not a live API -- Milestone E (the
  * FastAPI service) does not exist yet. Every value rendered here comes from
- * the real BaselineDecision/EnsembleDecision/AttributionRow shapes in
- * types/contract.ts, so wiring this to a real `fetch(...)` later should
- * only require replacing the data source, not any rendering logic below.
+ * the real BaselineDecision/EnsembleDecision/AttributionRow/
+ * ReasoningNarrative shapes in types/contract.ts, so wiring this to a real
+ * `fetch(...)` later should only require replacing the data source, not
+ * any rendering logic below.
  */
 
 function stageClass(status: "fired" | "passed" | "pending"): string {
@@ -62,10 +63,53 @@ function PipelineView({ session }: { session: SessionDecisionResponse }) {
         )}
       </div>
 
-      <div className="pipeline-stage pipeline-stage--pending">
+      <div className={stageClass("passed")}>
         <div className="pipeline-stage__label">Layer 4 — Reasoning &amp; audit</div>
-        <span className="badge badge--warn">not built (Milestone D)</span>
+        <span className="badge badge--allow">narrated</span>
       </div>
+    </div>
+  );
+}
+
+function NarrativeView({ session }: { session: SessionDecisionResponse }) {
+  if (!session.narrative) {
+    return <p className="section-note">This session has not been narrated.</p>;
+  }
+  const n = session.narrative;
+  const isBlocked = n.verdict_summary !== "allowed";
+  return (
+    <div>
+      <div className="narrative-verdict">
+        <span className={`badge ${isBlocked ? "badge--block" : "badge--allow"}`}>{n.verdict_summary}</span>
+        <span className="narrative-meta">
+          {n.model} · {new Date(n.generated_at).toLocaleString()}
+        </span>
+      </div>
+      <p className="narrative-text">{n.narrative}</p>
+      {(n.rule_citations.length > 0 || n.feature_citations.length > 0) && (
+        <div className="citation-lists">
+          {n.rule_citations.length > 0 && (
+            <div className="citation-group">
+              <span className="citation-group__label">Rules cited</span>
+              {n.rule_citations.map((rule) => (
+                <span className="badge badge--block" key={rule}>
+                  {rule}
+                </span>
+              ))}
+            </div>
+          )}
+          {n.feature_citations.length > 0 && (
+            <div className="citation-group">
+              <span className="citation-group__label">Features cited</span>
+              {n.feature_citations.map((feature) => (
+                <span className="badge badge--warn" key={feature}>
+                  {feature}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -84,14 +128,11 @@ function AttributionView({ session }: { session: SessionDecisionResponse }) {
     <div>
       {session.attribution.map((row) => (
         <div className="attribution-row" key={row.feature}>
-          <span style={{ width: 220, flexShrink: 0, color: "var(--text-dim)" }}>{row.feature}</span>
+          <span style={{ width: 220, flexShrink: 0, color: "var(--slate)" }}>{row.feature}</span>
           <span className="attribution-bar-track">
             <span
-              className="attribution-bar"
-              style={{
-                width: `${(Math.abs(row.shap_value) / maxAbs) * 100}%`,
-                background: row.shap_value >= 0 ? "var(--danger)" : "var(--success)",
-              }}
+              className={`attribution-bar ${row.shap_value >= 0 ? "attribution-bar--positive" : "attribution-bar--negative"}`}
+              style={{ width: `${(Math.abs(row.shap_value) / maxAbs) * 100}%` }}
             />
           </span>
           <span style={{ width: 60, textAlign: "right" }}>{row.shap_value.toFixed(3)}</span>
@@ -142,11 +183,11 @@ export default function LiveDemo() {
 
       <div className="panel">
         <h2 className="section-title">Decision narrative</h2>
-        <div className="narrative-placeholder">
-          Milestone D (reasoning &amp; audit layer) has not been built yet. Once it exists, this
-          panel will show a plain-language explanation of the verdict above, citing exactly which
-          check fired and why — narration only, never able to change the verdict itself.
-        </div>
+        <p className="section-note">
+          Plain-language explanation of the verdict above, citing exactly which check fired and
+          why — narration only, produced after the verdict and structurally unable to change it.
+        </p>
+        <NarrativeView session={session} />
       </div>
     </>
   );

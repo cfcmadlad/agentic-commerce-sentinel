@@ -83,14 +83,17 @@ def mcnemar_test(
             "with zero discordant pairs"
         )
 
-    p_value = binomtest(challenger_only, discordant, p=0.5, alternative="two-sided").pvalue
+    # scipy's .pvalue is numpy.float64; cast before comparing so `significant`
+    # is a plain Python bool rather than numpy.bool_, which `and` would then
+    # propagate unconverted into `favors_challenger` on the False branch.
+    p_value = float(binomtest(challenger_only, discordant, p=0.5, alternative="two-sided").pvalue)
     significant = p_value < alpha
     favors_challenger = significant and challenger_only > baseline_only
 
     return McNemarResult(
         baseline_only_correct=baseline_only,
         challenger_only_correct=challenger_only,
-        p_value=float(p_value),
+        p_value=p_value,
         significant=significant,
         favors_challenger=favors_challenger,
     )

@@ -46,3 +46,27 @@ def test_rejects_zero_discordant_pairs() -> None:
     same = np.array([True, False, True, True])
     with pytest.raises(ValueError, match="discordant"):
         mcnemar_test(same, same)
+
+
+def test_result_fields_are_plain_python_types_not_numpy_scalars() -> None:
+    """`p_value`/`significant`/`favors_challenger` must be plain float/bool.
+
+    scipy's `binomtest(...).pvalue` is `numpy.float64`; comparing it directly
+    against `alpha` produces `numpy.bool_`, and `and` returns that operand
+    unconverted whenever it is falsy. `json.dumps` rejects `numpy.bool_`
+    outright, so this is checked on both the significant and not-significant
+    branches rather than trusted from a single case.
+    """
+    baseline_correct = np.array([True] * 20 + [False] * 30)
+    challenger_correct = np.array([True] * 45 + [False] * 5)
+    significant_result = mcnemar_test(baseline_correct, challenger_correct)
+    assert type(significant_result.p_value) is float
+    assert type(significant_result.significant) is bool
+    assert type(significant_result.favors_challenger) is bool
+
+    not_significant = mcnemar_test(
+        np.array([True, False] * 20), np.array([False, True] * 20)
+    )
+    assert type(not_significant.p_value) is float
+    assert type(not_significant.significant) is bool
+    assert type(not_significant.favors_challenger) is bool

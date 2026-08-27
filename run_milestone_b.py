@@ -17,8 +17,10 @@ rest of the report and prints a warning; a reported result must include it.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
+from pathlib import Path
 
 from eval.milestone_b import (
     DEFAULT_LATENCY_SESSIONS,
@@ -26,6 +28,7 @@ from eval.milestone_b import (
     format_milestone_b_report,
     run_milestone_b,
 )
+from eval.report_json import milestone_b_report_to_dict
 from generator.attack_config import DEFAULT_ATTACK_BASE_RATE
 from generator.attacks.corpus import build_evaluation_corpus
 
@@ -75,6 +78,10 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--skip-sensitivity", action="store_true",
         help="skip the generator parameter grid; produces an incomplete report",
     )
+    parser.add_argument(
+        "--json-out", type=Path, default=None,
+        help="also write the report as JSON to this path, for the static metrics dashboard",
+    )
     parser.add_argument("--verbose", action="store_true", help="emit progress logging")
     return parser.parse_args(argv)
 
@@ -118,6 +125,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(format_milestone_b_report(report))
+
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(
+            json.dumps(milestone_b_report_to_dict(report), indent=2), encoding="utf-8"
+        )
+        print(f"\nwrote JSON report to {args.json_out}", file=sys.stderr)
+
     if args.skip_sensitivity:
         print(
             "\nWARNING: --skip-sensitivity was set. This report omits the generator "

@@ -97,9 +97,10 @@ class Mandate(BaseModel):
         parent_mandate_id: If this mandate was derived from a broader
             mandate (delegation / chaining), the parent's ID. None for a
             root mandate signed directly by the user. Present from the
-            even though the chaining detector (Section 3, held-out class)
-            first schema version, because retrofitting this field later
-            would touch every downstream consumer of `Mandate`.
+            first schema version, even though the chaining detector
+            (Section 3, held-out class) isn't built yet, because
+            retrofitting this field later would touch every downstream
+            consumer of `Mandate`.
         issued_at: UTC time the mandate was signed.
         expires_at: UTC time after which the mandate is void outright,
             independent of `scope.valid_until`.

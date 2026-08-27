@@ -18,3 +18,7 @@ dist/
 
 .DS_Store
 .env
+
+# Local tooling config and planning docs — not part of the shipped project.
+/.claude/
+/docs/PROJECT_PLAN.md

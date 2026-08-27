@@ -380,6 +380,8 @@ Evaluated exactly once, against the already-frozen pipeline above, with the meth
 
 **Per the project's own standing constraint, no code in `detect/`, `features/`, or the generator was changed in response to this number.** A future Layer 2.5 (chain scope containment) or parent-relative features are legitimate next design decisions, but they belong to a separate, deliberate milestone — not a same-day reaction to a result this methodology was built specifically to keep untuned.
 
+This is the largest of several named exception categories this system currently cannot confidently classify — see [`EXCEPTIONS.md`](EXCEPTIONS.md) for the full list, including the sensitivity-grid pacing fragility, the calibration blind spot, and the false-positive side of the same threshold.
+
 ## 8. Why AP2, not NPCI's UAP
 
 The mandate format is modeled on **AP2 (Google's Agent Payments Protocol)**, specifically its Intent Mandate — a real, public, versioned specification (`google-agentic-commerce/AP2`, v0.2.0, April 2026) that already defines exactly the kind of bounded authorization this project needs: a signed record of spending limits, category constraints, and an expiration, produced by a user's own device.
@@ -409,6 +411,8 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 **This system has no representation of mandate delegation as a chain.** Every check in Layers 1–3 reasons about one mandate, or one session against one mandate, in isolation — none of them compare a mandate's authority to its parent's. [§7](#7-evaluation-results)'s held-out result measures the direct consequence: 0.88% recall on mandate-chaining / privilege-escalation attacks, against 99.76% on the three classes this project does check for. This is not a tuning gap that more data or a different threshold would close — it is an architectural one, and closing it (a chain-aware Layer 2 check, or parent-relative Layer 3 features) is real, undone work, not a rounding error in an otherwise-complete system.
 
 **Layer 4's narrative text is not reproducible the way every number elsewhere in this document is.** This project's standing rule is full reproducibility from a seed; an LLM's prose cannot meet that bar even at temperature 0, across a provider's own model updates least of all. What *is* reproducible and tested for exact equality is the structured input built for one decision and the fact that Layer 4 never touches a score or a verdict — see `/reasoning`'s own module docstrings for the full reasoning. Treat the narrative as an explanation of a reproducible decision, not as a reproducible artifact itself.
+
+Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.md) turns each one into a named, reproducible category of session this system cannot confidently classify — what falls through, what signal (if any) came closest to firing, and what would actually close the gap.
 
 ## 12. Repository structure
 
@@ -452,6 +456,9 @@ run_milestone_b.py      command-line entry point for the full evaluation
 run_held_out_eval.py    command-line entry point for the held-out class evaluation
 run_collision_export.py exports real per-session scores/features for the
                         frontend's data-exploration views
+EXCEPTIONS.md           named categories of sessions this system cannot
+                        confidently classify, each reproducible from the
+                        evaluation commands above
 ```
 
 ## 13. Running this yourself

@@ -1,12 +1,12 @@
 /**
  * Mock session fixtures for the live demo view.
  *
- * Stands in for Milestone E (the FastAPI service, not built yet). Every
- * fixture here uses the real BaselineDecision/EnsembleDecision/
- * AttributionRow/ReasoningNarrative shapes from types/contract.ts, so
- * swapping this module for a real `fetch` to E later should not require
- * touching any component that consumes it -- only this file and the fetch
- * call itself change.
+ * Stands in for a live call against the FastAPI service (now built under
+ * /service). Every fixture here uses the real BaselineDecision/
+ * EnsembleDecision/AttributionRow/ReasoningNarrative shapes from
+ * types/contract.ts, so swapping this module for a real `fetch` to the
+ * running service later should not require touching any component that
+ * consumes it -- only this file and the fetch call itself change.
  *
  * `narrative` on each fixture is genuine output from `reasoning.narrate.
  * narrate()`, run once against the real Groq API with a NarrationInput

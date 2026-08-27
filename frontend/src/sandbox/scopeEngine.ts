@@ -9,8 +9,9 @@
  * identity model that doesn't fit a lightweight client-side sandbox, so
  * they're left out rather than faked.
  *
- * There is no backend behind this (Milestone E doesn't exist yet); this is
- * real logic re-implemented in TypeScript, not a simulation of an API call.
+ * There is no backend behind this page -- it never calls the API service
+ * (Milestone E), even though that service now exists; this is real logic
+ * re-implemented in TypeScript, not a simulation of an API call.
  * If Layer 2's actual rules ever change, this file needs the matching
  * edit by hand -- same maintenance contract `types/contract.ts` already
  * states for the backend types it mirrors.

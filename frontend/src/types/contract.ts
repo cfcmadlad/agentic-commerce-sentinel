@@ -7,9 +7,9 @@
  *   - AttributionRow      <- detect/attribution.py (explain_row)
  *   - ReasoningNarrative  <- reasoning/schema.py::Narration
  *
- * There is still no live API service (Milestone E) for this frontend to
- * call -- every value rendered by the live demo view comes from
- * `mock/sessions.ts`, not a `fetch(...)`. The fixtures were produced by
+ * The API service (Milestone E) is built under /service, but this frontend
+ * does not call it yet -- every value rendered by the live demo view still
+ * comes from `mock/sessions.ts`, not a `fetch(...)`. The fixtures were produced by
  * actually running `reasoning.narrate.narrate()` against the real Groq API
  * for each mock session's real Baseline/Ensemble/Attribution data (see the
  * comment in `mock/sessions.ts`), not written by hand, so the narrative

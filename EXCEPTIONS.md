@@ -15,7 +15,7 @@ named here, not just the one the README leads with.
 
 ---
 
-## 1. Mandate-chaining / privilege escalation — the held-out class
+## 1. Mandate-chaining / privilege escalation — what Layer 2.5 still misses
 
 **What it is.** An agent uses a legitimate, correctly scoped mandate to bootstrap a larger,
 unauthorized action by exploiting a declared delegation relationship (`Mandate.parent_mandate_id`)
@@ -23,42 +23,48 @@ rather than by forging or misusing a single mandate directly. Five sub-variants:
 `breadth_escalation`, `temporal_outlive`, `unauthorized_subdelegation`, `fanout_structuring`. Full
 definitions in README §6.
 
-**Why it falls through.** Every layer in this system reasons about one mandate in isolation, or one
-session against the mandate it presents — never a mandate's authority against its parent's. Layer 1
-checks a mandate against itself (signature, expiry, budget); every chained child mandate is
-genuinely, correctly signed and passes on its own terms. Layer 2 checks a session against its own
-mandate's scope, and has no rule comparing that scope to a `parent_mandate_id`'s. None of Layer 3's
-thirteen features reference `parent_mandate_id` or compare one mandate's fields to another's, so a
-chaining session's timing, composition, and amount-relative-to-history all look exactly as ordinary
-as the generator was built to make them look.
+**Layers 1-3 alone miss all of it — Layer 2.5 (containment) recovers most of it.** Every check in
+Layers 1-3 reasons about one mandate in isolation, or one session against the mandate it presents —
+never a mandate's authority against its parent's, so all 3,529 held-out attacks scored below half the
+operating threshold before Layer 2.5 existed (`docs/adr/0003-held-out-class-evaluation.md`). Layer 2.5
+(`/containment`, `docs/adr/0004-delegation-chain-containment.md`) was built afterward specifically for
+this gap: five deterministic rules comparing a delegated mandate to its resolved parent (scope subset,
+remaining sibling cap, bounded expiry, bounded depth, no cycles). Evaluated once against the same
+frozen held-out corpus, it lifts ensemble recall from 0.00% to 76.14%. What follows is what still falls
+through *after* Layer 2.5, not the original three-layer picture.
 
-**Closest signal that fired.** None, for the overwhelming majority. Of the 3,498 sessions the
-ensemble missed across all five variants, every single one scored below half the operating
-threshold — the `behaviorally_ordinary` bucket, not `elevated_but_insufficient`. The model is not
-registering partial suspicion on this class; it has no representation of the thing that makes these
-sessions wrong. The one partial exception is `fanout_structuring` (n=1,775, the largest variant),
-which shows a small nonzero rules-only recall (1.24%, unchanged by the ensemble) — an incidental
-overlap with existing scope checks on individual sibling mandates, not detection of the fan-out
-pattern itself, which no layer represents.
+**Why the remainder falls through.** `unauthorized_subdelegation` is a genuinely-signed hand-off to a
+second agent the user never authorized — its scope otherwise matches its parent exactly, so none of
+Layer 2.5's five rules (all about authority *width*, not identity) have any reason to fire. The small
+amount that is caught (2.59%) is incidental: it happens only when that subdelegated mandate shares a
+parent with an unrelated, already-committed sibling, so the remaining-cap rule fires for a reason that
+has nothing to do with the subdelegation itself. `fanout_structuring`'s residual 24.54% is the first
+sibling in each structuring group: individually within its own declared ceiling and, at the moment it
+is decided, genuinely the first claim against its parent's capacity — indistinguishable from an
+ordinary well-scoped delegation until later siblings arrive and the pattern becomes visible in
+hindsight.
 
-| Variant | n | Rules-only recall | Ensemble recall |
-|---|---|---|---|
-| `budget_escalation` | 436 | 0.00% | 0.00% |
-| `unauthorized_subdelegation` | 420 | 0.00% | 0.00% |
-| `temporal_outlive` | 454 | 0.66% | 0.88% |
-| `breadth_escalation` | 444 | 0.90% | 1.13% |
-| `fanout_structuring` | 1,775 | 1.24% | 1.24% |
+| Variant | n | Rules-only recall | Rules+containment recall | Full stack recall |
+|---|---|---|---|---|
+| `budget_escalation` | 456 | 0.00% | 100.00% | 100.00% |
+| `breadth_escalation` | 439 | 0.00% | 100.00% | 100.00% |
+| `temporal_outlive` | 462 | 0.00% | 100.00% | 100.00% |
+| `fanout_structuring` | 1,748 | 0.00% | 75.46% | 75.46% |
+| `unauthorized_subdelegation` | 424 | 0.00% | 2.59% | 2.59% |
 
-**What would resolve it.** A chain-aware check — either a Layer 2.5 that recursively validates a
-child mandate's scope against every ancestor's remaining authority, or parent-relative Layer 3
-features (a child-to-parent ceiling ratio, a count of sibling mandates issued from the same parent
-within a window). Per the project's own standing constraint and `docs/adr/0003-held-out-class-evaluation.md`,
-this is a legitimate future milestone with its own design reasoning, not a same-session patch written
-in reaction to this number.
+**What would resolve it.** For `unauthorized_subdelegation`: a rule checking agent-identity continuity
+across a delegation chain (does the receiving agent appear anywhere the user actually authorized),
+which is a different kind of property than anything Layer 2.5 currently checks. For the residual
+`fanout_structuring` share: nothing short-circuits the "first sibling looks ordinary" problem within a
+single deterministic pass — a behavioral feature comparing a mandate's sibling count or fan-out rate
+against its own agent's history is the more plausible fix, and Layer 3 does not currently have one. Per
+the project's own standing constraint, this is a legitimate future milestone with its own design
+reasoning, not a same-session patch written in reaction to these numbers.
 
 **Reproduce with:**
 ```bash
 python run_held_out_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042
+python run_containment_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042
 ```
 
 ---

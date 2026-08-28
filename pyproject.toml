@@ -24,6 +24,12 @@ dependencies = [
     # Milestone E: the API service wrapping the full pipeline.
     "fastapi==0.141.1",
     "uvicorn==0.52.4",
+    # Milestone P: Z3 SMT solver, formally verifying the deterministic
+    # layers' decision logic (never the ML ensemble -- see /formal).
+    "z3-solver==5.1.0.0",
+    # Milestone Q: graph construction and Louvain community detection for
+    # cross-session/cross-agent collusion-ring detection -- see /collusion.
+    "networkx==3.6.1",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +51,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*"]
+include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*", "containment*", "formal*", "collusion*"]
 
 [tool.ruff]
 line-length = 120

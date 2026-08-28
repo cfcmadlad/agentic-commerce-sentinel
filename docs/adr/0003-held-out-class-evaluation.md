@@ -53,26 +53,28 @@ stream.
 
 ## Result
 
-23,529 held-out sessions, 3,529 mandate-chaining attacks.
+23,529 held-out sessions, 3,529 mandate-chaining attacks. (Revised once; see
+the addendum at the end of this document for why these numbers differ from
+the first version of this ADR, and why the finding itself did not change.)
 
 | | Recall |
 |---|---|
 | In-distribution ensemble recall (Milestone B test block, for reference) | 99.76% |
-| Held-out rules-only (Layer 1+2) recall | 0.82% |
-| Held-out ensemble recall | 0.88% |
-| Degradation | 98.88 points |
+| Held-out rules-only (Layer 1+2) recall | 0.00% |
+| Held-out ensemble recall | 0.00% |
+| Degradation | 99.76 points |
 
 Per variant (rules-only -> ensemble):
 
 | Variant | n | Recall |
 |---|---|---|
-| `budget_escalation` | 436 | 0.00% -> 0.00% |
-| `unauthorized_subdelegation` | 420 | 0.00% -> 0.00% |
-| `temporal_outlive` | 454 | 0.66% -> 0.88% |
-| `breadth_escalation` | 444 | 0.90% -> 1.13% |
-| `fanout_structuring` | 1775 | 1.24% -> 1.24% |
+| `budget_escalation` | 456 | 0.00% -> 0.00% |
+| `unauthorized_subdelegation` | 424 | 0.00% -> 0.00% |
+| `temporal_outlive` | 462 | 0.00% -> 0.00% |
+| `breadth_escalation` | 439 | 0.00% -> 0.00% |
+| `fanout_structuring` | 1748 | 0.00% -> 0.00% |
 
-Of the 3,498 sessions the ensemble missed, **every single one** scored below
+Of the 3,529 sessions the ensemble missed, **every single one** scored below
 half the operating threshold -- zero fell into the "elevated but
 insufficient" bucket. The model is not registering partial, below-threshold
 suspicion on this class; each of these sessions is fully indistinguishable
@@ -104,14 +106,12 @@ relationship:
   dimensions ordinary and isolate the escalation to the parent-child
   relationship alone.
 
-The near-zero recall is a direct measurement of a real, previously
-undocumented architectural gap: **nothing in this project reasons about
-mandate delegation as a chain**, only about one mandate in isolation. The one
-per-variant pattern worth naming: `fanout_structuring` (n=1775) is the
-largest class and the only one with a nonzero-but-flat rules-only recall
-(1.24%, unchanged by the ensemble) -- a small, incidental overlap with
-existing scope checks on individual siblings, not detection of the
-fan-out pattern itself, which no layer represents.
+The zero recall is a direct measurement of a real, previously undocumented
+architectural gap: **nothing in this project reasons about mandate
+delegation as a chain**, only about one mandate in isolation. Every one of
+the five variants sits at exactly 0.00% recall under both rules-only and the
+ensemble -- there is no partial, incidental overlap with any existing check
+worth naming; the gap is total, not merely severe.
 
 ## Consequences -- and the constraint this ADR exists to enforce
 
@@ -120,16 +120,11 @@ than softened, re-run under different generator parameters, or quietly left
 out of the headline evaluation section.
 
 **No code in `detect/`, `features/`, or the generator's attack-side tuning
-will be changed in response to this result during the current milestone
-scope.** Doing so now would be tuning a detector against the exact test
+was changed in response to this result during the milestone that produced
+it.** Doing so would have been tuning a detector against the exact test
 meant to measure whether it generalizes -- the one thing this entire
 methodology (fresh-context authorship, file-level import isolation,
-evaluate-exactly-once) was built to prevent. If this project's roadmap later
-adds a Layer 2.5 (mandate-chain scope containment: recursively checking a
-child's scope against every ancestor's) or parent-relative Layer 3 features,
-that is a legitimate, separate design decision for a future milestone --
-made deliberately, with its own reasoning recorded, not as a reflexive patch
-written the same day this number was seen.
+evaluate-exactly-once) was built to prevent.
 
 This finding belongs to Milestone D (the reasoning/audit layer) and
 Milestone H (`EXCEPTIONS.md`) as real input: a plain-language explanation of
@@ -137,3 +132,55 @@ Milestone H (`EXCEPTIONS.md`) as real input: a plain-language explanation of
 layer in this system currently checks a mandate against its parent's
 authority" -- which is a stronger, more credible answer to a panel question
 than a system that either doesn't know it has this gap or hides it.
+
+A Layer 2.5 (mandate-chain scope containment) has since been built as a
+legitimate, separate design decision for a later milestone, with its own
+reasoning recorded rather than as a reflexive same-session patch -- see
+`docs/adr/0004-delegation-chain-containment.md` for its design, its own
+once-only evaluation against this same held-out corpus, and what it does and
+does not recover of the gap this ADR measures.
+
+## Addendum: numbers revised once, 2026-08-28
+
+The Result section above was corrected once, after Layer 2.5's development
+surfaced a latent bug this evaluation's own numbers had never been checked
+against: `generator/attacks/held_out.py` passed the identical `seed` value to
+both `generate_legitimate_sessions` and `generate_mandate_chaining_attacks`,
+unlike `generator/attacks/corpus.py`'s three attack generators, which
+deliberately offset their seeds from the legitimate generator's own for
+exactly this reason. Two independently constructed
+`np.random.default_rng(seed)` streams from an identical seed are the same
+deterministic function of draw position, and across a full corpus generation
+(tens of thousands of draws in each stream) enough draw positions land in
+alignment to produce genuine `mandate_id` collisions between an unrelated
+legitimate mandate and a chaining-generated one -- confirmed directly (about
+a dozen colliding IDs in a moderate test corpus, not a one-in-a-trillion
+coincidence).
+
+This was invisible to every consumer of this corpus before Layer 2.5,
+including this ADR's own first measurement: Layers 1-3, and
+`eval/held_out_evaluation.py` itself, only ever resolve a mandate by
+*session*, never by ID, so a colliding ID never caused a session to be scored
+against the wrong mandate. It became visible only once containment needed to
+resolve an *ancestor* mandate by ID for the first time -- and, on the small
+number of sessions it affected, it was producing an artificially nonzero
+rules-only recall on `temporal_outlive`, `breadth_escalation`, and
+`fanout_structuring` by incidentally routing a session's scope check against
+the wrong mandate's content.
+
+The fix (`generator/attacks/held_out.py::SEED_OFFSET_CHAINING`) is a one-line,
+purely mechanical change -- it offsets an internal seed value and touches no
+attack-generation logic, no generator configuration parameter, and nothing in
+`detect/` or `features/`. It is not a reaction to this ADR's recall number in
+the sense the standing constraint above prohibits: it does not make any
+attack easier or harder to generate or to catch. It does change the held-out
+corpus's exact realization for a given seed, which is why the specific counts
+and percentages in the Result section above differ from this ADR's original
+version. **The finding itself is unchanged, and is now stated more starkly
+than before:** every one of the five variants sits at exactly 0.00% recall,
+where the original (bug-affected) measurement showed a few variants with a
+small, spurious nonzero recall that this addendum's own root-cause account
+shows was never real signal. Containment's own store
+(`containment/store.py::build_store_from_signed_mandates`) additionally fails
+closed on any ID that still resolves to conflicting content, as defense in
+depth independent of this fix -- see `docs/adr/0004`.

@@ -2,7 +2,7 @@
 
 **A defense-only verification layer that checks whether an AI agent's payment stays inside what its human actually authorized — before the payment goes through.**
 
-Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager).
+Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager). New here? [`OVERVIEW.md`](OVERVIEW.md) is a five-minute, plain-language read before this document's full technical depth.
 
 ---
 
@@ -52,12 +52,13 @@ Nothing in that stack today verifies a signed authorization from a human, checks
 
 ## 3. Architecture
 
-Three detection layers feed a reasoning/audit layer:
+Four detection layers feed a reasoning/audit layer:
 
 | Layer | Purpose | Status |
 |---|---|---|
 | **1. Mandate verification** | Is the agent's signed authorization genuine, unexpired, bound to this agent's registered key, and not already used up? | **Built** |
 | **2. Scope enforcement** | Does this specific transaction — amount, merchant, item category, timing — fit inside what the mandate actually authorizes? | **Built** |
+| **2.5. Delegation-chain containment** | If this mandate was delegated from a parent, did the delegation itself stay inside the parent's authority — narrower scope, no expiry beyond the parent's, no more than the parent's remaining capacity split across siblings? | **Built** |
 | **3. Behavioral anomaly detection** | Does this agent's session look like the agent it claims to be, based on patterns the first two layers structurally cannot see? | **Built** |
 | **4. Reasoning & audit** | Given the deterministic and learned layers' outputs, narrate the decision in plain language. Never sets the verdict — only explains what the earlier layers already decided. | **Built** |
 
@@ -67,7 +68,7 @@ Every decision the finished system makes writes an append-only audit record, and
 
 Layers 1 and 2 are deterministic on purpose. A spending ceiling, a merchant allowlist, a time window — these are facts that can be checked exactly, with no tolerance and no learned uncertainty, and a reviewer should be able to reproduce the verdict by hand from the mandate and the transaction alone.
 
-Layer 3 exists because some attacks are *not* expressible as a rule. An agent that presents a completely genuine, in-scope, unexpired mandate — but is being driven by something other than the agent it claims to be — passes Layers 1 and 2 by construction. That isn't a gap in the rules; it's the boundary of what rules can see at all. Layer 3 is combined with Layers 1 and 2 through a strict ensemble rule: the deterministic layers can only ever be *added to*, never overridden. A session Layer 1 or 2 already blocks stays blocked regardless of what Layer 3's score says; Layer 3 can only extend coverage into the sessions the deterministic layers already let through. This means a bug or drift in the learned layer can, at worst, fail to catch something new — it can never unblock something the deterministic layers correctly flagged.
+Layer 3 exists because some attacks are *not* expressible as a rule. An agent that presents a completely genuine, in-scope, unexpired mandate — but is being driven by something other than the agent it claims to be — passes Layers 1 and 2 by construction. That isn't a gap in the rules; it's the boundary of what rules can see at all. Layer 3 is combined with Layers 1, 2, and 2.5 through a strict ensemble rule: the deterministic layers can only ever be *added to*, never overridden. A session any deterministic layer already blocks stays blocked regardless of what Layer 3's score says; Layer 3 can only extend coverage into the sessions the deterministic layers already let through. This means a bug or drift in the learned layer can, at worst, fail to catch something new — it can never unblock something a deterministic layer correctly flagged. Layer 2.5 is deterministic for the same reason Layers 1 and 2 are: a delegated mandate's authority relative to its parent's is a fact that can be checked exactly, not a pattern that needs learning.
 
 ### Data flow
 
@@ -78,8 +79,11 @@ flowchart TD
     L1["Layer 1 — Mandate verification\nsignature · expiry · budget"] -->|passes| L2
     L1 -->|fails| R1["Reject\nunknown signer / bad signature /\nexpired / budget exhausted"]
 
-    L2["Layer 2 — Scope enforcement\namount · merchant · category · window"] -->|passes| L3
+    L2["Layer 2 — Scope enforcement\namount · merchant · category · window"] -->|passes| L25
     L2 -->|fails| R2["Reject\nover ceiling / wrong merchant /\nwrong category / outside window"]
+
+    L25["Layer 2.5 — Delegation-chain containment\nscope subset · remaining sibling cap · bounded expiry/depth"] -->|no parent, or passes| L3
+    L25 -->|fails| R25["Reject\nscope exceeds parent / expiry exceeds parent /\nsibling cap exceeded / broken chain"]
 
     L3["Layer 3 — Behavioral anomaly detection\ngradient-boosted model over causal features"] -->|score below threshold| L4
     L3 -->|score at or above threshold| ESC["Escalate to human review"]
@@ -124,6 +128,40 @@ Like Layer 1, every rule that fires is collected, not just the first. And every 
 ### Rules-only baseline
 
 `detect/baseline.py` combines Layers 1 and 2 into a single stateful classifier (`RulesOnlyBaseline`) that processes a chronologically ordered stream of sessions and returns a block/allow verdict for each, along with every rule that fired. This baseline is not a placeholder for the eventual system — it's the number the behavioral model has to beat with statistical significance, or get dropped from the design entirely. See [§7](#7-evaluation-results).
+
+### Delegation-chain containment (Layer 2.5, `/containment`)
+
+Layers 1 and 2 each reason about one mandate, or one session against the mandate it presents, in isolation. Neither compares a mandate's authority to the authority of the mandate it was delegated from (`Mandate.parent_mandate_id`) — that gap is exactly what the held-out class described in [§6](#6-attack-taxonomy) measures, and [§7](#7-evaluation-results) shows the result: a total miss. Layer 2.5 is a new, deterministic layer built specifically to close it, sitting between Layer 2 and Layer 3 and able to veto independently, on the same "add, never override" rule as every other deterministic layer.
+
+Five rules, checked against a mandate's resolved ancestor chain (`containment/chain.py`):
+
+- **Scope subset** — every dimension of a delegated mandate's scope (ceiling, currency, merchant/item categories, merchant allowlist, time window, transaction count) must fit inside its immediate parent's, not merely resemble it.
+- **Remaining sibling cap** — a delegated mandate's own ceiling must not exceed what its parent has left after every other child already committed against the same parent, tracked statefully as sessions are processed in order (`containment/gate.py`). This is the rule aimed at fan-out structuring: several individually-unremarkable siblings whose combined ceilings exceed the parent's.
+- **Bounded expiry** — a delegated mandate cannot outlive its own parent's outright expiry.
+- **Bounded depth** — a delegation chain longer than a named constant (`MAX_DELEGATION_DEPTH`) is rejected outright.
+- **No cycles** — a chain that revisits a mandate ID it has already seen is rejected outright.
+
+A sixth property runs underneath all five: `assert_known_scope_fields` compares `MandateScope`'s actual field set against the fixed set this engine has an explicit rule for on every call, and raises rather than silently passing if they've drifted — the literal implementation of "fail closed on a constraint field this engine doesn't recognize," not a comment promising it. The chain store itself fails closed the same way if a mandate ID ever resolves to two different pieces of content rather than arbitrarily picking one (see `docs/adr/0004-delegation-chain-containment.md` for why that check exists).
+
+Evaluated exactly once against the same frozen held-out corpus [§7](#7-evaluation-results) uses, per the same once-only discipline `docs/adr/0003` established: **76.14% ensemble recall**, up from 0.00% without it. `budget_escalation`, `breadth_escalation`, and `temporal_outlive` — each a single delegated mandate whose own scope, expiry, or window openly exceeds its parent's — are caught at 100%. `fanout_structuring` is caught at 75.46%: the sibling-cap rule catches every sibling once enough of a group has already committed, but the first sibling in any such group is, on its own, indistinguishable from an ordinary well-scoped delegation. `unauthorized_subdelegation` — a genuinely-signed hand-off to a second agent the user never authorized, with a scope that otherwise matches its parent exactly — is caught only 2.59% of the time, and only incidentally, when it happens to share a parent with an unrelated, already-committed sibling; nothing in the five rules above checks agent-identity continuity across a chain, because that is a different kind of property (who is allowed to receive delegated authority) than the authority-width property this layer was scoped to check. This is stated plainly rather than reframed as success, matching every other evaluation in this document: closing it is real, undone work for a future milestone, not a same-session patch. Full per-variant numbers, the honest failure story, and the scope boundary are in `docs/adr/0004-delegation-chain-containment.md`.
+
+### Formal verification of Layers 1, 2, and 2.5 (`/formal`)
+
+Everything above this point is tested — exercised against concrete cases, including generated corpora and adversarial constructions. This section proves a different, stronger kind of claim about the same code: not "these cases pass," but "no case in the encoded space fails at all." `formal/model.py` transcribes Layers 1, 2, and 2.5's real decision logic — `mandate.verification.verify_mandate`, `detect.scope.enforce_scope`, `containment.engine.enforce_containment`, `containment.gate.ContainmentGate`'s sequential sibling ledger — into Z3 SMT constraints over bounded numeric and finite-set domains (amounts, timestamps, category/merchant membership, delegation depth), and `formal/properties.py` states eight safety properties against that encoding: an over-ceiling amount always denies scope regardless of every other field, an expired or budget-exhausted mandate never verifies, a delegated mandate's authority can only narrow relative to its parent's and never exceeds the configured depth bound, a sequential group of sibling mandates never collectively over-commits their parent's cap, and no session can be simultaneously auto-approved and flagged for escalation. `formal/verify.py` proves each one by asserting its negation and requiring Z3 to return `unsat` — if a counterexample existed anywhere in the bounded space, Z3 would find it and report the exact values, not just fail to find one after limited sampling.
+
+**Layer 3 is deliberately never encoded here.** A learned model's decision boundary is not expressible in closed-form SMT constraints; encoding an approximation of it would prove something about the approximation, not the system this project ships. Every property either concerns the deterministic layers alone, or treats Layer 3's contribution as a free, entirely unconstrained input — a property holding for every value of that variable holds regardless of what the real model would ever output. This package also never generates attack payloads: its outputs are proofs and counterexamples about this repository's own encoded policy logic, not techniques against a real system.
+
+`python run_verify_policy_properties.py`: **8/8 properties proved**, on the first real run, in well under a second. As a demonstration that this is a real check and not a rubber stamp, `docs/adr/0005-formal-verification-of-deterministic-layers.md` records a deliberately introduced bug — one of `containment/engine.py`'s three near-identical subset checks reversed, a realistic copy-paste mistake — kept as a permanent, re-runnable test (`tests/test_formal_verify.py`) rather than a one-off script: Z3 finds the maximally illustrative counterexample on its own (a child claiming every merchant category, delegated from a parent claiming none, silently accepted by the reversed check), and the same check restored to its real, shipped direction proves `unsat` again. The full property list, the encoding's stated abstractions, and an explicit accounting of what this milestone proves versus what it does not (Layer 3, Ed25519's own correctness, the ancestor-chain graph walk itself, values outside the declared bounds) are in that ADR.
+
+### Cross-agent collusion / ring detection (`/collusion`)
+
+Every layer above this point — Layers 1 through 3, and Layer 2.5 — reasons about one session, or one mandate's own delegation chain, in isolation. None of them look *across* agent identities. This layer does: it asks whether several ostensibly independent agents are, in fact, the same operator (a shared device fingerprint), or are cooperating to route one large action through many small, individually-unremarkable identities (structuring across agents, or a ring transacting with overlapping counterparties in a coordinated window). This is a structurally different class of coverage from Milestone C's disclosed single-session gap or Layer 2.5's single-chain gap — no mandate delegation is involved anywhere in this layer, and it makes no claim of having addressed either of those gaps.
+
+`generator/collusion/rings.py` plants three malicious archetypes, each isolating one signal, and two deliberately hard legitimate negatives per this milestone's own false-positive requirement: a household genuinely sharing one device but transacting independently (tests whether fingerprint-sharing *alone* gets flagged), and a larger group of agents that all happen to use one popular merchant with no coordination at all (tests whether ordinary shared-infrastructure traffic gets flagged). `collusion/graph.py` builds an agent graph — nodes are agents, edges are a shared device fingerprint or a genuine multi-agent burst at one counterparty inside a coordination window — and `collusion/community.py` applies Louvain community detection (`networkx`) to surface candidate rings, which `collusion/scoring.py` scores on a size-driven fingerprint signal and a multi-agent structuring ratio.
+
+**Two real design flaws were found and fixed while calibrating this layer, not invented for demonstration.** A single agent's own large, ordinary purchase initially read as "structuring" because the scoring didn't check how many distinct agents contributed to a coordinated window — a bug, found by running the pipeline against a real corpus and reading the output, not by inspection. And a plain "fraction of agent pairs sharing a fingerprint" metric couldn't tell a three-person household apart from a Sybil cluster of any size; redesigned to saturate as the *count* of identities sharing one device grows past a plausible family size. A related, measured (not assumed) finding: at realistic traffic volume against a small, fixed 40-agent pool, two agents coincidentally landing near each other in time at a popular merchant turns out to be common, not rare — fixed by requiring a genuine four-or-more-agent burst, not a pairwise coincidence, before an edge forms at all.
+
+`python run_collusion_eval.py`: at the calibrated operating threshold, **100% recall on planted rings, 100% precision, 0% false positives on both hard-negative classes, 2.5% baseline-agent noise**. The false-positive side has a real, honestly reported operating boundary: baseline noise rises with per-agent session density against the fixed agent pool, from 0% at moderate volume to over 60% at volume roughly three times higher — reported as a measured density-sensitivity finding, not tuned away, matching the same discipline `docs/adr/0001`'s own sensitivity grid holds to. Full design, the calibration story, and the density table are in `docs/adr/0006-collusion-ring-detection.md`.
 
 ### Feature extraction (`/features`)
 
@@ -359,26 +397,26 @@ Two further observations worth stating because they cut against the headline. **
 
 ### Held-out class result: mandate chaining / privilege escalation
 
-Evaluated exactly once, against the already-frozen pipeline above, with the methodology described in [§6](#6-attack-taxonomy) and the full writeup in `docs/adr/0003-held-out-class-evaluation.md`. 23,529 held-out sessions, 3,529 attacks across the five sub-variants.
+Evaluated exactly once, against the already-frozen pipeline above, with the methodology described in [§6](#6-attack-taxonomy) and the full writeup in `docs/adr/0003-held-out-class-evaluation.md`. 23,529 held-out sessions, 3,529 attacks across the five sub-variants. (These recall figures were revised once, after the original run: `generator/attacks/held_out.py` had a mandate-ID generation bug, described in `docs/adr/0003`'s addendum and `docs/adr/0004-delegation-chain-containment.md`, that produced a small number of accidental ID collisions between unrelated mandates — invisible to Layers 1-3 since none of them resolve a mandate by ID, but the fix changes the held-out corpus's exact realization. The finding itself is unchanged; if anything it is now stated more starkly.)
 
 | | Recall |
 |---|---|
 | In-distribution ensemble recall (this section's own headline, for reference) | 99.76% |
-| Held-out rules-only recall | 0.82% |
-| Held-out ensemble recall | **0.88%** |
-| Degradation | 98.88 points |
+| Held-out rules-only recall | 0.00% |
+| Held-out ensemble recall | **0.00%** |
+| Degradation | 99.76 points |
 
 | Variant | n | Rules-only → Ensemble |
 |---|---|---|
-| `budget_escalation` | 436 | 0.00% → 0.00% |
-| `unauthorized_subdelegation` | 420 | 0.00% → 0.00% |
-| `temporal_outlive` | 454 | 0.66% → 0.88% |
-| `breadth_escalation` | 444 | 0.90% → 1.13% |
-| `fanout_structuring` | 1,775 | 1.24% → 1.24% |
+| `budget_escalation` | 456 | 0.00% → 0.00% |
+| `unauthorized_subdelegation` | 424 | 0.00% → 0.00% |
+| `temporal_outlive` | 462 | 0.00% → 0.00% |
+| `breadth_escalation` | 439 | 0.00% → 0.00% |
+| `fanout_structuring` | 1,748 | 0.00% → 0.00% |
 
-**This is a near-total miss, stated plainly rather than reframed.** Of the 3,498 sessions the ensemble failed to catch, every one of them scored below half the operating threshold — none registered even partial suspicion. This is not a generalization failure in the usual sense (a model that saw related patterns and didn't quite extrapolate); it is a direct, structurally-explained consequence of what this project checks. Every mandate-chaining variant keeps a session's own shape, pacing, and internal scope consistency exactly ordinary — the violation lives entirely in the relationship between a mandate's authority and its parent's, and **nothing in Layers 1–3 currently inspects that relationship at all**: Layer 1 checks a mandate against itself, Layer 2 checks a session against the mandate it presents, and none of Layer 3's thirteen features reference `parent_mandate_id` or compare one mandate to another. This project has no representation of mandate delegation as a chain, only of one mandate in isolation — a real architectural gap this evaluation exists to surface, not to paper over.
+**This is a total miss, stated plainly rather than reframed.** Every one of the 3,529 held-out attacks scored below half the operating threshold — none registered even partial suspicion, and rules-only and ensemble recall are identically zero across every sub-variant. This is not a generalization failure in the usual sense (a model that saw related patterns and didn't quite extrapolate); it is a direct, structurally-explained consequence of what this project checks. Every mandate-chaining variant keeps a session's own shape, pacing, and internal scope consistency exactly ordinary — the violation lives entirely in the relationship between a mandate's authority and its parent's, and **nothing in Layers 1–3 currently inspects that relationship at all**: Layer 1 checks a mandate against itself, Layer 2 checks a session against the mandate it presents, and none of Layer 3's thirteen features reference `parent_mandate_id` or compare one mandate to another. This project has no representation of mandate delegation as a chain, only of one mandate in isolation — a real architectural gap this evaluation exists to surface, not to paper over.
 
-**Per the project's own standing constraint, no code in `detect/`, `features/`, or the generator was changed in response to this number.** A future Layer 2.5 (chain scope containment) or parent-relative features are legitimate next design decisions, but they belong to a separate, deliberate milestone — not a same-day reaction to a result this methodology was built specifically to keep untuned.
+**Per the project's own standing constraint, no code in `detect/`, `features/`, or the generator's attack-side tuning was changed in response to this number.** (`generator/attacks/held_out.py`'s one line of change, noted above, fixed a mandate-ID uniqueness bug unrelated to attack difficulty or detection logic — it did not touch `detect/`, `features/`, or any attack-generation parameter.) Layer 2.5 (chain scope containment) has since been built as a new, separately-labelled layer on top of this frozen result — see [`docs/adr/0004-delegation-chain-containment.md`](docs/adr/0004-delegation-chain-containment.md) for what it recovers and what still evades it.
 
 This is the largest of several named exception categories this system currently cannot confidently classify — see [`EXCEPTIONS.md`](EXCEPTIONS.md) for the full list, including the sensitivity-grid pacing fragility, the calibration blind spot, and the false-positive side of the same threshold.
 
@@ -408,7 +446,7 @@ This project is a **detector and verifier**, not an enforcement or offensive sys
 
 **Two assumptions drive reported numbers and neither is measured.** The 10:1 false-negative-to-false-positive cost ratio sets the operating threshold (§4, §7); the cost sweep varies it from 1:1 to 30:1 so its leverage is visible rather than hidden. And the sensitivity grid varies one factor at a time, so it isolates which single parameter the result is most fragile to but cannot see interactions between two moving together.
 
-**This system has no representation of mandate delegation as a chain.** Every check in Layers 1–3 reasons about one mandate, or one session against one mandate, in isolation — none of them compare a mandate's authority to its parent's. [§7](#7-evaluation-results)'s held-out result measures the direct consequence: 0.88% recall on mandate-chaining / privilege-escalation attacks, against 99.76% on the three classes this project does check for. This is not a tuning gap that more data or a different threshold would close — it is an architectural one, and closing it (a chain-aware Layer 2 check, or parent-relative Layer 3 features) is real, undone work, not a rounding error in an otherwise-complete system.
+**Layers 1–3 have no representation of mandate delegation as a chain, and Layer 2.5 closes only part of that gap.** [§7](#7-evaluation-results)'s held-out result measures the original consequence: 0.00% recall on mandate-chaining / privilege-escalation attacks from Layers 1-3 alone, against 99.76% on the three classes this project does check for. Layer 2.5 (`/containment`, `docs/adr/0004-delegation-chain-containment.md`) was built afterward as a new, deterministic layer specifically for this gap, and recovers most of it — 76.14% ensemble recall, 100% on three of five sub-variants — but not all of it: `unauthorized_subdelegation` (a genuinely-signed hand-off to an agent the user never authorized) is caught only incidentally, 2.59% of the time, because containment checks authority *width* against a parent, not agent-identity continuity across the chain. That remaining gap is real, undone work for a future milestone, not a rounding error.
 
 **Layer 4's narrative text is not reproducible the way every number elsewhere in this document is.** This project's standing rule is full reproducibility from a seed; an LLM's prose cannot meet that bar even at temperature 0, across a provider's own model updates least of all. What *is* reproducible and tested for exact equality is the structured input built for one decision and the fact that Layer 4 never touches a score or a verdict — see `/reasoning`'s own module docstrings for the full reasoning. Treat the narrative as an explanation of a reproducible decision, not as a reproducible artifact itself.
 
@@ -423,8 +461,25 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 attacks/chaining.py   held-out class only, see §6/§7
                 attacks/held_out.py   held-out corpus builder — the training
                                       corpus builder never imports either
+                collusion/            planted ring + hard-negative generator
+                                      for /collusion (see §4)
 /detect       scope-enforcement rules engine, rules-only baseline,
               behavioral model, calibration, ensemble, SHAP attribution
+/containment  Layer 2.5: delegation-chain containment (see §4)
+                schema.py    violation reasons, the fail-closed schema-drift guard
+                store.py     mandate-by-ID resolution, fails closed on ID conflicts
+                chain.py     ancestor-chain walking, cycle/depth detection
+                engine.py    the five containment rules, a pure function
+                gate.py      stateful orchestration, the sibling-cap ledger
+/formal       formal verification of Layers 1, 2, and 2.5 with Z3 (see §4)
+                model.py       Z3 encoding of the real decision logic
+                properties.py  the eight safety properties
+                verify.py      the negate-and-check-unsat harness
+/collusion    cross-agent collusion/ring detection (see §4)
+                graph.py       agent graph: fingerprint + burst edges
+                community.py   Louvain community detection (networkx)
+                scoring.py     fingerprint signal + structuring ratio
+                detect.py      orchestration into a verdict per candidate
 /features     causal feature extraction for the behavioral model
 /eval         evaluation harnesses and the full metric set:
                 gate.py               rules-only baseline report
@@ -439,6 +494,8 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 milestone_a.py        Layer 3 vs baseline comparison
                 milestone_b.py        the complete evaluation and its gate verdict
                 held_out_evaluation.py the one-shot held-out class result
+                containment_evaluation.py the one-shot Layer 2.5 result
+                collusion_evaluation.py the collusion-ring precision/recall/FPR harness
                 report_json.py        JSON export for the static dashboard
 /reasoning    Layer 4: narration (schema.py, narrate.py, Groq-backed),
               append-only audit log (audit_log.py)
@@ -453,11 +510,16 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
               of Layer 2's rules, and two real-data explorations of the
               model's own scores and features
 /docs/adr     architecture decision records
-tests/        444 tests, covering every layer above
+tests/        556 tests, covering every layer above
 run_gate.py             command-line entry point for the rules-baseline evaluation
 run_milestone_a.py      command-line entry point for the Layer 3 pipeline
 run_milestone_b.py      command-line entry point for the full evaluation
 run_held_out_eval.py    command-line entry point for the held-out class evaluation
+run_containment_eval.py command-line entry point for the Layer 2.5 evaluation
+run_verify_policy_properties.py command-line entry point for the Z3 formal
+                        verification of Layers 1, 2, and 2.5
+run_collusion_eval.py   command-line entry point for the collusion-ring
+                        detection evaluation
 run_collision_export.py exports real per-session scores/features for the
                         frontend's data-exploration views
 run_live_demo_export.py exports the live demo's five real signed request
@@ -465,6 +527,8 @@ run_live_demo_export.py exports the live demo's five real signed request
 EXCEPTIONS.md           named categories of sessions this system cannot
                         confidently classify, each reproducible from the
                         evaluation commands above
+OVERVIEW.md             plain-language orientation, no technical depth --
+                        read this first if you're new here
 ```
 
 ## 13. Running this yourself
@@ -475,13 +539,16 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 444 passed
+pytest -q                                              # expect: 556 passed
 ruff check .                                           # expect: All checks passed!
-mypy mandate common generator detect features eval tests reasoning service   # expect: Success: no issues found
+mypy mandate common generator detect features eval tests reasoning service containment formal collusion   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 python run_milestone_a.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
 python run_milestone_b.py --n-legitimate 20000 --seed 42   # the full evaluation
 python run_held_out_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042   # the held-out class result
+python run_containment_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042   # the Layer 2.5 result
+python run_verify_policy_properties.py                 # the Z3 formal-verification result (8/8 proved)
+python run_collusion_eval.py                            # the collusion-ring detection result
 ```
 
 Seven of the tests exercise Layer 4's live Groq call and are skipped unless `GROQ_API_KEY` is set (copy `.env.example` to `.env` and fill in a key from [console.groq.com/keys](https://console.groq.com/keys) — the rest of the suite, and the detection pipeline itself, works identically without one; narration alone degrades to a stated placeholder, see §4).

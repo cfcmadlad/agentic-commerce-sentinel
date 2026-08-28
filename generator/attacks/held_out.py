@@ -37,6 +37,26 @@ logger = logging.getLogger(__name__)
 # there is no realism requirement pulling it toward a production-like rate.
 DEFAULT_HELD_OUT_ATTACK_BASE_RATE = 0.15
 
+# Offsets the chaining generator's RNG stream from the legitimate generator's
+# own, mirroring generator/attacks/corpus.py's SEED_OFFSET_REPLAY/SCOPE/
+# IMPERSONATION pattern for its three attack generators. Without this, both
+# generators independently construct np.random.default_rng(seed) from the
+# identical seed value; since each stream is a pure function of (seed, call
+# position), the two can land on the same raw draw at different call
+# positions somewhere across a full corpus generation, producing a genuine
+# mandate_id collision between an unrelated legitimate mandate and a
+# chaining-generated one -- confirmed directly (a dozen colliding IDs in a
+# moderate-sized corpus, not a one-in-a-trillion fluke). This was invisible
+# to every existing consumer -- Layers 1-3, and Milestone C's own held-out
+# evaluation -- because none of them resolve a mandate by ID, only by
+# session, so a colliding ID never caused a wrong session to be scored. It
+# became visible only once Layer 2.5 (containment) needed to resolve an
+# ancestor mandate by ID for the first time; see
+# docs/adr/0004-delegation-chain-containment.md for the full account,
+# including containment's own defense-in-depth fail-closed behavior on any
+# ID that still resolves to conflicting content regardless of this fix.
+SEED_OFFSET_CHAINING = 10_000
+
 
 def build_held_out_corpus(
     n_legitimate: int,
@@ -88,7 +108,7 @@ def build_held_out_corpus(
     legitimate = generate_legitimate_sessions(n_legitimate, seed=seed, config=generator_config)
     world = build_world(legitimate)
 
-    attacks = generate_mandate_chaining_attacks(world, n_attacks, seed=seed)
+    attacks = generate_mandate_chaining_attacks(world, n_attacks, seed=seed + SEED_OFFSET_CHAINING)
 
     presented = {}
     for labeled in legitimate.labeled_sessions:

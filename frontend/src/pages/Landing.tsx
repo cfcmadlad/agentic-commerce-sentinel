@@ -349,7 +349,7 @@ export default function Landing() {
             <p className="live-finding__body">
               The system catches 99.76% of the attacks it was built to catch. Against a class it
               was never shown — mandate chaining, a legitimate mandate used to bootstrap a
-              bigger, unauthorized one — it catches 0.88%. That's the number worth leading with.
+              bigger, unauthorized one — it catches 0.00%. That's the number worth leading with.
               Drag the line yourself; there's no threshold in this real data that fixes it.
             </p>
           </div>

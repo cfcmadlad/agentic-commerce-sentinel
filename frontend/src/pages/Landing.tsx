@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import AgentReplay from "../components/AgentReplay";
 import DataBackdrop from "../components/DataBackdrop";
 import MiniCollide from "../components/MiniCollide";
+import Reveal from "../components/Reveal";
 
 /**
  * Marketing landing page.
@@ -10,9 +12,25 @@ import MiniCollide from "../components/MiniCollide";
  * fetched live and not invented for effect. The three floating cards
  * mirror real output shapes from the live demo (a blocked decision, a
  * signed SHAP attribution, an evaluation statistic) rather than mocking up
- * a generic product screenshot. `MiniCollide` and `DataBackdrop` are the one
- * exception to "static": both read the same real `public/collision.json`
- * every other data page reads, live, in the browser.
+ * a generic product screenshot. `MiniCollide`, `DataBackdrop`, and
+ * `AgentReplay` are the exceptions to "static": all three read or replay
+ * the same real fixture/exported data every other data page reads, live,
+ * in the browser.
+ *
+ * Section order is a deliberate progressive-disclosure sequence, not
+ * incidental: (1) hero -- one concrete scenario, zero jargon, plus a live
+ * replay proving the point a static hero can't; (2) why this exists --
+ * still plain language, sets up the question classical fraud detection
+ * doesn't ask; (3) how it decides -- the four-layer technical explainer,
+ * and the only place "mandate"/"session" get defined; (4) real output --
+ * the artifact cards and the held-out result, jargon now earned; (5)
+ * around the site / further reading -- go-deeper material. Reordering
+ * these sections re-introduces the comprehension gap this structure exists
+ * to fix (see docs/PROJECT_PLAN.md Milestone F2) -- keep new content in the
+ * layer it actually belongs to rather than appending it wherever is
+ * convenient. `Reveal` wraps each of these beats so the page discloses
+ * itself as you scroll, not just as you read -- a no-op under
+ * prefers-reduced-motion (see index.css's `.reveal` rule).
  */
 
 function DecisionCard() {
@@ -20,12 +38,15 @@ function DecisionCard() {
     <div className="artifact-card">
       <div className="artifact-card__label">Decision</div>
       <div className="artifact-card__row">
-        <span className="artifact-card__mono">layer2:amount_over_ceiling</span>
-      </div>
-      <div className="artifact-card__row" style={{ marginTop: 10 }}>
         <span className="badge badge--block">blocked</span>
         <span className="artifact-card__mono">₹45,000.00</span>
       </div>
+      <p className="artifact-stat__sub" style={{ margin: "6px 0" }}>
+        Over the spending ceiling the mandate allowed.
+      </p>
+      <span className="artifact-card__mono" style={{ fontSize: 11, opacity: 0.6 }}>
+        layer2:amount_over_ceiling
+      </span>
     </div>
   );
 }
@@ -40,6 +61,9 @@ function AttributionCard() {
   return (
     <div className="artifact-card">
       <div className="artifact-card__label">Feature attribution</div>
+      <p className="artifact-stat__sub" style={{ marginTop: -4, marginBottom: 13 }}>
+        What pushed this session's risk score up the most.
+      </p>
       {rows.map(([name, value]) => (
         <div className="attribution-row" key={name}>
           <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: "var(--slate)" }}>{name}</span>
@@ -60,10 +84,12 @@ function EvaluationCard() {
     <div className="artifact-card">
       <div className="artifact-card__label">Evaluation</div>
       <div className="artifact-stat">0.9982</div>
+      <p className="artifact-stat__sub" style={{ margin: "4px 0 8px" }}>
+        How well the model ranks real attacks above real legitimate sessions — 1.0 is perfect.
+      </p>
       <div className="artifact-stat__sub">
-        AUC-PR, ensemble vs. rules-only baseline
-        <br />
-        McNemar p ≈ 1.4×10⁻¹²
+        AUC-PR, ensemble vs. rules-only baseline · McNemar p ≈ 1.4×10⁻¹² (a real improvement, not
+        noise)
       </div>
     </div>
   );
@@ -199,14 +225,15 @@ export default function Landing() {
         <DataBackdrop className="data-backdrop--hero" />
         <span className="hero__eyebrow">
           <span className="hero__eyebrow-dot" />
-          Mandate verification for agentic payments
+          For AI shopping agents
         </span>
         <h1 className="hero__title">
-          Verify what your agent is <em>actually</em> doing.
+          You set the budget. This checks your agent is <em>actually</em> staying inside it.
         </h1>
         <p className="hero__subtitle">
-          A defense-only layer that checks whether an AI agent's payment stays inside what a human
-          actually authorized — before the payment goes through.
+          Tell an AI agent "up to ₹2,000 a month on groceries," and today nothing stops it from
+          spending ₹8,000 on electronics instead — with your real card, no theft involved. This
+          project is the check that catches that, before the payment goes through.
         </p>
         <div className="hero__actions">
           <Link to="/sandbox" className="btn btn--filled">
@@ -216,158 +243,187 @@ export default function Landing() {
             Open live demo
           </Link>
         </div>
-      </section>
-
-      <section className="section--fog">
-        <div className="section__inner">
-          <div className="section__eyebrow">Why this exists</div>
-          <h2 className="section__title">
-            Fraud detection asks one question. Agentic payments raise a second one nobody's checking.
-          </h2>
-          <p className="section__subtitle">
-            AI agents can now spend money on a human's behalf — Razorpay and NPCI have already
-            launched agentic UPI payments. Classical fraud detection asks whether a transaction is
-            fraudulent: real card, real merchant, real device. Once an agent can act for someone, a
-            different failure becomes possible, and nothing in that stack looks for it — a user
-            authorizes "up to ₹2,000/month on groceries," and the agent spends ₹8,000 on electronics.
-            Every classical signal stays clean. The agent simply acted outside the authority it was
-            given. This project is a verification layer for exactly that failure: it checks the
-            agent's signed authorization, enforces the scope that authorization actually grants, and
-            watches for sessions that don't look like the agent that was supposed to be acting.
+        <div className="hero__proof">
+          <p className="hero__proof-caption">
+            A spending ceiling only catches the sessions that break it on paper. Here's one that
+            didn't — and still got caught.
           </p>
-          <p className="section__subtitle" style={{ marginTop: 14 }}>
-            A quick glossary, since the rest of this site uses these words a lot: a{" "}
-            <strong>mandate</strong> is the signed, bounded authorization a human gives an agent (a
-            ceiling, a category, a time window). A <strong>session</strong> is one attempted
-            transaction. A <strong>layer</strong> is one of the four checks below — each one either
-            blocks a session, passes it to the next layer, or (for Layer 4) narrates what the earlier
-            three already decided.
-          </p>
+          <AgentReplay />
         </div>
       </section>
 
-      <div className="artifact-section">
-        <div className="artifact-grid">
-          <DecisionCard />
-          <AttributionCard />
-          <EvaluationCard />
-        </div>
-      </div>
+      <Reveal>
+        <section className="section--fog">
+          <div className="section__inner">
+            <div className="section__eyebrow">Why this exists</div>
+            <h2 className="section__title">
+              Card fraud checks catch a stolen card. They don't catch an agent going off-script.
+            </h2>
+            <p className="section__subtitle">
+              Classical fraud detection asks one question: is this transaction fraudulent? Real
+              card, real merchant, real device. In the electronics-instead-of-groceries example
+              above, every one of those stays completely clean — nothing stolen, nothing faked.
+              The agent just didn't stay inside what it was actually told to do, and no fraud
+              system asks that question, because it was never built to. This isn't hypothetical,
+              either — Razorpay and NPCI have already launched AI agents that complete UPI
+              purchases on a user's behalf, without a human confirming each one.
+            </p>
+            <p className="section__subtitle" style={{ marginTop: 14 }}>
+              This project sits in front of the payment and asks the second question instead:
+              does this specific purchase match what the human actually agreed to?
+            </p>
+          </div>
+        </section>
+      </Reveal>
 
-      <section className="live-finding">
-        <div className="live-finding__text">
-          <div className="section__eyebrow">The honest part</div>
-          <h2 className="live-finding__title">
-            We held out an entire attack class and never trained against it.
-          </h2>
-          <p className="live-finding__body">
-            The system catches 99.76% of the attacks it was built to catch. Against a class it was
-            never shown — mandate chaining, exploiting the relationship between a mandate and its
-            parent — it catches 0.88%. That's the number worth leading with. Drag the line yourself;
-            there's no threshold in this real data that fixes it.
-          </p>
-        </div>
-        <MiniCollide />
-      </section>
+      <Reveal>
+        <section className="section--fog">
+          <div className="section__inner">
+            <div className="section__eyebrow">How it decides</div>
+            <h2 className="section__title">Four checks, each answering something the last one can't.</h2>
+            <p className="section__subtitle">
+              Two quick terms, since the rest of this site uses them a lot: the budget from the
+              example above — the ceiling, the category, the time window — is called a{" "}
+              <strong>mandate</strong>. One attempted purchase is called a <strong>session</strong>.
+              Here's what happens to a session, in order. The first two checks are exact and
+              auditable by hand. The third exists because some attacks simply aren't expressible
+              as a rule. The fourth explains the other three — and is structurally unable to
+              overrule them.
+            </p>
 
-      <section className="section--fog">
-        <div className="section__inner">
-          <div className="section__eyebrow">How it decides</div>
-          <h2 className="section__title">Four checks, each answering something the last one can't.</h2>
-          <p className="section__subtitle">
-            The first two are exact and auditable by hand. The third exists because some attacks
-            simply aren't expressible as a rule. The fourth explains the other three — and is
-            structurally unable to overrule them.
-          </p>
-
-          <div className="flow-strip" aria-hidden="true">
-            {LAYERS.map((layer, i) => (
-              <div className="flow-strip__step" key={layer.index}>
-                <div className="flow-strip__node">
-                  <LayerIcon kind={layer.icon} />
+            <div className="flow-strip" aria-hidden="true">
+              {LAYERS.map((layer, i) => (
+                <div className="flow-strip__step" key={layer.index}>
+                  <div className="flow-strip__node">
+                    <LayerIcon kind={layer.icon} />
+                  </div>
+                  <span className="flow-strip__label">{layer.title}</span>
+                  {i < LAYERS.length - 1 && <span className="flow-strip__arrow">→</span>}
                 </div>
-                <span className="flow-strip__label">{layer.title}</span>
-                {i < LAYERS.length - 1 && <span className="flow-strip__arrow">→</span>}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div className="layer-grid">
-            {LAYERS.map((layer) => (
-              <div className="layer-card" key={layer.index}>
-                <div className="layer-card__icon">
-                  <LayerIcon kind={layer.icon} />
+            <div className="layer-grid">
+              {LAYERS.map((layer) => (
+                <div className="layer-card" key={layer.index}>
+                  <div className="layer-card__icon">
+                    <LayerIcon kind={layer.icon} />
+                  </div>
+                  <div className="layer-card__index">{layer.index}</div>
+                  <div className="layer-card__title">{layer.title}</div>
+                  <p className="layer-card__body">{layer.body}</p>
                 </div>
-                <div className="layer-card__index">{layer.index}</div>
-                <div className="layer-card__title">{layer.title}</div>
-                <p className="layer-card__body">{layer.body}</p>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <div className="artifact-section">
+          <div style={{ textAlign: "center", maxWidth: 640, margin: "0 auto" }}>
+            <div className="section__eyebrow">See it work</div>
+            <h2 className="section__title" style={{ margin: "0 auto 14px" }}>
+              Real output. Not a mockup.
+            </h2>
+            <p className="section__subtitle" style={{ margin: "0 auto 40px" }}>
+              Three things this system actually produces on a real transaction — pulled from a
+              genuine decision, not staged for the screenshot.
+            </p>
+          </div>
+          <div className="artifact-grid">
+            <DecisionCard />
+            <AttributionCard />
+            <EvaluationCard />
           </div>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="section--fog">
-        <div className="section__inner">
-          <div className="section__eyebrow">Around the site</div>
-          <h2 className="section__title">Five ways to look at the same real system.</h2>
-          <p className="section__subtitle">
-            Nothing below is a mockup. Each page reads real decisions, real per-session scores, or a
-            real port of the production rule engine — no page needs the others open to make sense.
-          </p>
-          <div className="layer-grid">
-            {PAGES.map((page) => (
-              <Link to={page.path} className="layer-card guide-card" key={page.path}>
-                <div className="layer-card__index">{page.index}</div>
-                <div className="layer-card__title">{page.title}</div>
-                <p className="layer-card__body">{page.body}</p>
-                <span className="guide-card__cta">Open {page.title.toLowerCase()} →</span>
-              </Link>
-            ))}
+      <Reveal>
+        <section className="live-finding">
+          <div className="live-finding__text">
+            <div className="section__eyebrow">The honest part</div>
+            <h2 className="live-finding__title">
+              We held out an entire attack class and never trained against it.
+            </h2>
+            <p className="live-finding__body">
+              The system catches 99.76% of the attacks it was built to catch. Against a class it
+              was never shown — mandate chaining, a legitimate mandate used to bootstrap a
+              bigger, unauthorized one — it catches 0.88%. That's the number worth leading with.
+              Drag the line yourself; there's no threshold in this real data that fixes it.
+            </p>
           </div>
-        </div>
-      </section>
+          <MiniCollide />
+        </section>
+      </Reveal>
 
-      <section className="section--fog">
-        <div className="section__inner">
-          <div className="section__eyebrow">Further reading</div>
-          <h2 className="section__title">What this project actually builds on.</h2>
-          <p className="section__subtitle">
-            Every method here is a real, citable technique, not an invented one — this is the reading
-            list, not a bibliography for show.
+      <Reveal>
+        <section className="section--fog">
+          <div className="section__inner">
+            <div className="section__eyebrow">Around the site</div>
+            <h2 className="section__title">Five ways to look at the same real system.</h2>
+            <p className="section__subtitle">
+              Nothing below is a mockup. Each page reads real decisions, real per-session scores, or a
+              real port of the production rule engine — no page needs the others open to make sense.
+            </p>
+            <div className="layer-grid">
+              {PAGES.map((page) => (
+                <Link to={page.path} className="layer-card guide-card" key={page.path}>
+                  <div className="layer-card__index">{page.index}</div>
+                  <div className="layer-card__title">{page.title}</div>
+                  <p className="layer-card__body">{page.body}</p>
+                  <span className="guide-card__cta">Open {page.title.toLowerCase()} →</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="section--fog">
+          <div className="section__inner">
+            <div className="section__eyebrow">Further reading</div>
+            <h2 className="section__title">What this project actually builds on.</h2>
+            <p className="section__subtitle">
+              Every method here is a real, citable technique, not an invented one — this is the reading
+              list, not a bibliography for show.
+            </p>
+            <ul className="reading-list">
+              {FURTHER_READING.map((item) => (
+                <li className="reading-list__item" key={item.label}>
+                  {item.href ? (
+                    <a href={item.href} target="_blank" rel="noreferrer" className="reading-list__label">
+                      {item.label} ↗
+                    </a>
+                  ) : (
+                    <span className="reading-list__label">{item.label}</span>
+                  )}
+                  <p className="reading-list__detail">{item.detail}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="closing">
+          <h2 className="closing__title">Don't take our word for it.</h2>
+          <p className="closing__subtitle">
+            Build your own mandate, set your own ceiling, and try to get a transaction past it. Or
+            walk through five real sessions the detection pipeline has already decided on.
           </p>
-          <ul className="reading-list">
-            {FURTHER_READING.map((item) => (
-              <li className="reading-list__item" key={item.label}>
-                {item.href ? (
-                  <a href={item.href} target="_blank" rel="noreferrer" className="reading-list__label">
-                    {item.label} ↗
-                  </a>
-                ) : (
-                  <span className="reading-list__label">{item.label}</span>
-                )}
-                <p className="reading-list__detail">{item.detail}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <section className="closing">
-        <h2 className="closing__title">Don't take our word for it.</h2>
-        <p className="closing__subtitle">
-          Build your own mandate, set your own ceiling, and try to get a transaction past it. Or
-          walk through five real sessions the detection pipeline has already decided on.
-        </p>
-        <div className="hero__actions">
-          <Link to="/sandbox" className="btn btn--filled">
-            Try to break it
-          </Link>
-          <Link to="/demo" className="btn btn--ghost">
-            Open live demo
-          </Link>
-        </div>
-      </section>
+          <div className="hero__actions">
+            <Link to="/sandbox" className="btn btn--filled">
+              Try to break it
+            </Link>
+            <Link to="/demo" className="btn btn--ghost">
+              Open live demo
+            </Link>
+          </div>
+        </section>
+      </Reveal>
 
       <footer className="app-footer">
         All data shown is synthetic. This is a detector and verifier, not an autonomous enforcement

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { badgeClassForStage, computePipelineStages } from "../lib/pipeline";
 import { MOCK_SESSIONS, MOCK_SESSION_LABELS } from "../mock/sessions";
 import type { SessionDecisionResponse } from "../types/contract";
 
@@ -79,60 +80,18 @@ function useLiveDemoSessions(): LiveState {
   return state;
 }
 
-function stageClass(status: "fired" | "passed" | "pending"): string {
-  return `pipeline-stage pipeline-stage--${status}`;
-}
-
 function PipelineView({ session }: { session: SessionDecisionResponse }) {
-  const layer1Fired = session.baseline.verification_reasons.length > 0;
-  const layer2Fired = session.baseline.scope_reasons.length > 0;
-  const rulesBlocked = session.baseline.blocked;
-  const layer3Reached = !rulesBlocked;
-  const layer3Fired = session.ensemble.source === "behavioral";
-
+  const stages = computePipelineStages(session);
   return (
     <div className="pipeline-stages">
-      <div className={stageClass(layer1Fired ? "fired" : "passed")}>
-        <div className="pipeline-stage__label">Layer 1 — Mandate verification</div>
-        {layer1Fired ? (
-          <span className="badge badge--block">
-            {session.baseline.verification_reasons.join(", ")}
-          </span>
-        ) : (
-          <span className="badge badge--allow">passed</span>
-        )}
-      </div>
-
-      <div
-        className={stageClass(
-          !layer3Reached && !layer1Fired ? "fired" : layer2Fired ? "fired" : layer1Fired ? "pending" : "passed",
-        )}
-      >
-        <div className="pipeline-stage__label">Layer 2 — Scope enforcement</div>
-        {layer1Fired ? (
-          <span className="badge badge--warn">not reached</span>
-        ) : layer2Fired ? (
-          <span className="badge badge--block">{session.baseline.scope_reasons.join(", ")}</span>
-        ) : (
-          <span className="badge badge--allow">passed</span>
-        )}
-      </div>
-
-      <div className={stageClass(!layer3Reached ? "pending" : layer3Fired ? "fired" : "passed")}>
-        <div className="pipeline-stage__label">Layer 3 — Behavioral model</div>
-        {!layer3Reached ? (
-          <span className="badge badge--warn">not reached</span>
-        ) : (
-          <span className={`badge ${layer3Fired ? "badge--block" : "badge--allow"}`}>
-            score {session.ensemble.behavioral_score?.toFixed(3) ?? "n/a"}
-          </span>
-        )}
-      </div>
-
-      <div className={stageClass("passed")}>
-        <div className="pipeline-stage__label">Layer 4 — Reasoning &amp; audit</div>
-        <span className="badge badge--allow">narrated</span>
-      </div>
+      {stages.map((stage) => (
+        <div className={`pipeline-stage pipeline-stage--${stage.status}`} key={stage.layer}>
+          <div className="pipeline-stage__label">
+            Layer {stage.layer} — {stage.label}
+          </div>
+          <span className={badgeClassForStage(stage.status)}>{stage.detail}</span>
+        </div>
+      ))}
     </div>
   );
 }

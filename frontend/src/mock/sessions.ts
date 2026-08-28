@@ -198,8 +198,8 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
 
 export const MOCK_SESSION_LABELS: Record<string, string> = {
   "11111111-1111-4111-8111-111111111111": "Legitimate — allowed",
-  "22222222-2222-4222-8222-222222222222": "Scope violation — amount over ceiling (Layer 2)",
-  "33333333-3333-4333-8333-333333333333": "Mandate replay — rapid reuse (Layer 3, rules-invisible)",
-  "44444444-4444-4444-8444-444444444444": "Agent impersonation — behavioral only (Layer 3, rules-invisible)",
-  "55555555-5555-4555-8555-555555555555": "Agent impersonation — forged signature (Layer 1)",
+  "22222222-2222-4222-8222-222222222222": "Spent too much — blocked on the spot (Layer 2)",
+  "33333333-3333-4333-8333-333333333333": "Reused the mandate seconds later — only behavior catches this (Layer 3)",
+  "44444444-4444-4444-8444-444444444444": "Same credentials, different behavior — only behavior catches this (Layer 3)",
+  "55555555-5555-4555-8555-555555555555": "Forged signature — caught before anything else runs (Layer 1)",
 };

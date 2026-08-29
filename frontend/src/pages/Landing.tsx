@@ -25,10 +25,10 @@ import Reveal from "../components/Reveal";
  * and the only place "mandate"/"session" get defined; (4) real output --
  * the artifact cards and the held-out result, jargon now earned; (5)
  * around the site / further reading -- go-deeper material. Reordering
- * these sections re-introduces the comprehension gap this structure exists
- * to fix (see docs/PROJECT_PLAN.md Milestone F2) -- keep new content in the
- * layer it actually belongs to rather than appending it wherever is
- * convenient. `Reveal` wraps each of these beats so the page discloses
+ * these sections re-introduces the first-time-comprehension gap this
+ * structure exists to fix -- keep new content in the layer it actually
+ * belongs to rather than appending it wherever is convenient. `Reveal`
+ * wraps each of these beats so the page discloses
  * itself as you scroll, not just as you read -- a no-op under
  * prefers-reduced-motion (see index.css's `.reveal` rule).
  */

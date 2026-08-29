@@ -11,10 +11,10 @@ verdict on whether the delegation itself stayed inside what the parent
 actually granted.
 
 Deterministic rules only -- no machine learning, no features borrowed from
-Layer 3. Not a patch to Milestone C's disclosed held-out-class result: every
-rule this package enforces was fixed by its design brief before it was ever
-run against the frozen held-out corpus, and nothing in `detect/`, `features/`,
-or the generator's tuning was touched to build it. See
+Layer 3. Not a patch to the disclosed held-out-class result: every rule this
+package enforces was fixed in its design before it was ever run against the
+frozen held-out corpus, and nothing in `detect/`, `features/`, or the
+generator's tuning was touched to build it. See
 `docs/adr/0004-delegation-chain-containment.md` for the design, the
 once-only evaluation protocol, and which chaining variants still evade it.
 """

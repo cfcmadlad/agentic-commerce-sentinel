@@ -1,13 +1,13 @@
-"""Tests for `formal.verify`, including the demonstration Milestone P's brief requires.
+"""Tests for `formal.verify`, including a real deliberate-bug demonstration.
 
 `test_all_real_properties_are_proved` is the main integration test: it
 mirrors `run_verify_policy_properties.py` exactly, proving every property
 this project ships stands up to Z3.
 
 `test_deliberately_broken_subset_check_yields_a_real_counterexample` and
-`test_the_same_check_fixed_is_proved` are the brief's own required
-demonstration, kept as permanent, real, re-runnable tests rather than a
-one-off script and a paraphrase in the ADR: introduce one genuine
+`test_the_same_check_fixed_is_proved` demonstrate the method actually
+working, kept as permanent, real, re-runnable tests rather than a one-off
+script and a paraphrase in the ADR: introduce one genuine
 transcription bug into an encoding (reversing one `IsSubset` direction --
 exactly the kind of copy-paste mistake this module's several near-identical
 subset checks invite), show Z3 return `sat` with a concrete counterexample,
@@ -113,9 +113,8 @@ def test_the_same_check_fixed_is_proved() -> None:
     `IsSubset` direction corrected back to `formal.model.scope_is_subset`'s
     real form -- already exercised end to end via property P5
     (`delegated_scope_only_attenuates`) in
-    `test_all_real_properties_are_proved`, restated here explicitly for the
-    direct broken-then-fixed comparison the brief for this milestone asks
-    for.
+    `test_all_real_properties_are_proved`, restated here explicitly for a
+    direct broken-then-fixed comparison.
     """
     v = fresh_containment_vars("fixed")
     premise = z3.And(containment_bounds(v), contained(v))

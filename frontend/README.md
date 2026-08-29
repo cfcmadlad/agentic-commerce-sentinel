@@ -46,7 +46,7 @@ drift from it. Regenerate after any change to the detection pipeline or a re-run
 
 ```bash
 cd ..
-python run_milestone_b.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
+python run_full_eval.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
 python run_collision_export.py --json-out frontend/public/collision.json
 ```
 

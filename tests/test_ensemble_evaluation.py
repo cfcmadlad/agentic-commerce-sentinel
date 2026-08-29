@@ -1,11 +1,15 @@
-"""Integration tests for `eval.milestone_a`: the full behavioral-model pipeline."""
+"""Integration tests for `eval.ensemble_evaluation`: the full behavioral-model pipeline."""
 
 from __future__ import annotations
 
 import pytest
 
 from common.schema import AttackClass
-from eval.milestone_a import MilestoneAReport, format_milestone_a_report, run_milestone_a
+from eval.ensemble_evaluation import (
+    EnsembleEvaluationReport,
+    format_ensemble_evaluation_report,
+    run_ensemble_evaluation,
+)
 from generator.attacks.corpus import build_evaluation_corpus
 
 # Large enough that the residual training and validation splits contain
@@ -17,17 +21,17 @@ SEED = 42
 
 
 @pytest.fixture(scope="module")
-def report() -> MilestoneAReport:
+def report() -> EnsembleEvaluationReport:
     """Runs the full pipeline once and shares the result across assertions.
 
     Returns:
-        The Milestone A report.
+        The ensemble-evaluation report.
     """
     corpus = build_evaluation_corpus(N_LEGITIMATE, seed=SEED)
-    return run_milestone_a(corpus)
+    return run_ensemble_evaluation(corpus)
 
 
-def test_splits_partition_the_corpus_without_overlap(report: MilestoneAReport) -> None:
+def test_splits_partition_the_corpus_without_overlap(report: EnsembleEvaluationReport) -> None:
     """Train and validation residual counts plus the test block must fit within the corpus."""
     assert report.n_train_residual > 0
     assert report.n_validation_residual > 0
@@ -35,13 +39,13 @@ def test_splits_partition_the_corpus_without_overlap(report: MilestoneAReport) -
     assert report.n_train_residual + report.n_validation_residual < report.n_sessions
 
 
-def test_ensemble_recall_is_at_least_the_baseline(report: MilestoneAReport) -> None:
+def test_ensemble_recall_is_at_least_the_baseline(report: EnsembleEvaluationReport) -> None:
     """Adding Layer 3 must never reduce coverage: it only adds blocks, never removes them."""
     assert report.ensemble_recall >= report.baseline_recall
 
 
-def test_ensemble_significantly_beats_the_rules_only_baseline(report: MilestoneAReport) -> None:
-    """The documented Milestone A result: the ensemble wins with significance.
+def test_ensemble_significantly_beats_the_rules_only_baseline(report: EnsembleEvaluationReport) -> None:
+    """The documented ensemble-evaluation result: the ensemble wins with significance.
 
     If this test starts failing, that is real information (Layer 3 stopped
     earning its place) and per project policy should be reported, not
@@ -51,7 +55,7 @@ def test_ensemble_significantly_beats_the_rules_only_baseline(report: MilestoneA
     assert report.beats_baseline
 
 
-def test_rules_invisible_variants_improve_under_the_ensemble(report: MilestoneAReport) -> None:
+def test_rules_invisible_variants_improve_under_the_ensemble(report: EnsembleEvaluationReport) -> None:
     """Rapid reuse and behavioral-only impersonation are what Layer 3 exists for."""
     by_variant = {c.variant: c for c in report.variant_comparison}
     assert by_variant["rapid_reuse"].rules_recall == 0.0
@@ -59,7 +63,7 @@ def test_rules_invisible_variants_improve_under_the_ensemble(report: MilestoneAR
     assert by_variant["behavioral_only"].rules_recall < by_variant["behavioral_only"].ensemble_recall
 
 
-def test_rules_visible_variants_are_unaffected(report: MilestoneAReport) -> None:
+def test_rules_visible_variants_are_unaffected(report: EnsembleEvaluationReport) -> None:
     """Variants the rules already catch at 1.0 recall must stay at 1.0 under the ensemble.
 
     The ensemble only adds blocks on rules-allowed sessions, so it cannot
@@ -72,13 +76,13 @@ def test_rules_visible_variants_are_unaffected(report: MilestoneAReport) -> None
         assert comparison.ensemble_recall == 1.0
 
 
-def test_calibration_sweep_threshold_is_monotonically_non_increasing(report: MilestoneAReport) -> None:
+def test_calibration_sweep_threshold_is_monotonically_non_increasing(report: EnsembleEvaluationReport) -> None:
     """A higher cost ratio must never raise the calibrated threshold."""
     thresholds = [r.threshold for r in report.calibration_sweep]
     assert thresholds == sorted(thresholds, reverse=True)
 
 
-def test_attribution_reports_pacing_or_reuse_features_prominently(report: MilestoneAReport) -> None:
+def test_attribution_reports_pacing_or_reuse_features_prominently(report: EnsembleEvaluationReport) -> None:
     """The top features should be behavioral signal, not incidental metadata.
 
     A model relying mainly on clock-time or amount features rather than
@@ -102,7 +106,7 @@ def test_attribution_reports_pacing_or_reuse_features_prominently(report: Milest
 
 
 def test_no_attack_class_gains_recall_without_the_ensemble_being_asked_to_improve_it(
-    report: MilestoneAReport,
+    report: EnsembleEvaluationReport,
 ) -> None:
     """Every reported variant belongs to one of the three trained attack classes.
 
@@ -114,9 +118,9 @@ def test_no_attack_class_gains_recall_without_the_ensemble_being_asked_to_improv
     assert AttackClass.MANDATE_CHAINING.value not in variants
 
 
-def test_report_formats_without_error(report: MilestoneAReport) -> None:
+def test_report_formats_without_error(report: EnsembleEvaluationReport) -> None:
     """The text report must render and mention the headline comparison."""
-    text = format_milestone_a_report(report)
+    text = format_ensemble_evaluation_report(report)
     assert "baseline" in text
     assert "ensemble" in text
     assert "behavioral_only" in text
@@ -147,4 +151,4 @@ def test_rejects_empty_corpus() -> None:
         params_digest=combined_params_digest(DEFAULT_GENERATOR_CONFIG, DEFAULT_ATTACK_CONFIG),
     )
     with pytest.raises(ValueError, match="empty corpus"):
-        run_milestone_a(empty)
+        run_ensemble_evaluation(empty)

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 
-from eval.milestone_b import run_milestone_b
-from eval.report_json import milestone_b_report_to_dict
+from eval.full_evaluation import run_full_evaluation
+from eval.report_json import full_evaluation_report_to_dict
 from generator.attacks.corpus import build_evaluation_corpus
 
 _CORPUS_SESSIONS = 2500
@@ -26,14 +26,14 @@ def _report_dict() -> dict[str, object]:
         The serialized report.
     """
     corpus = build_evaluation_corpus(_CORPUS_SESSIONS, seed=_CORPUS_SEED)
-    report = run_milestone_b(
+    report = run_full_evaluation(
         corpus,
         n_resamples=60,
         latency_sessions=200,
         sensitivity_sessions=800,
         run_sensitivity=False,
     )
-    return milestone_b_report_to_dict(report)
+    return full_evaluation_report_to_dict(report)
 
 
 def test_output_is_valid_json() -> None:

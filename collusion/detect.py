@@ -33,12 +33,12 @@ from generator.collusion.fingerprint import DeviceFingerprint
 logger = logging.getLogger(__name__)
 
 # The operating threshold `docs/adr/0006` reports: the largest value that
-# still catches every planted ring across this milestone's own evaluation,
-# minimizing false alarms subject to that constraint -- the same
+# still catches every planted ring in this layer's own evaluation, minimizing
+# false alarms subject to that constraint -- the same
 # missing-a-real-ring-costs-more-than-a-false-alarm principle this project
 # already applies via detect/calibration.py's cost ratio, stated here
-# directly rather than as an invented numeric cost figure this milestone has
-# no data to justify.
+# directly rather than as an invented numeric cost figure there is no data
+# to justify.
 DEFAULT_RING_THRESHOLD = 0.30
 
 

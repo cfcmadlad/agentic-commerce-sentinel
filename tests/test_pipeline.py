@@ -1,6 +1,6 @@
 """Tests for the shared detection-stack fit.
 
-The load-bearing test here is the drift check against `run_milestone_a`: two
+The load-bearing test here is the drift check against `run_ensemble_evaluation`: two
 evaluation paths over the same corpus that disagreed would mean one of the
 project's reported results was wrong, and nothing else in the suite would
 catch it.
@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from eval.milestone_a import run_milestone_a
+from eval.ensemble_evaluation import run_ensemble_evaluation
 from eval.pipeline import (
     RULES_ALLOWED_SCORE,
     RULES_BLOCKED_SCORE,
@@ -36,14 +36,14 @@ def corpus() -> EvaluationCorpus:
     return build_evaluation_corpus(_CORPUS_SESSIONS, seed=_CORPUS_SEED)
 
 
-def test_matches_milestone_a_headline_numbers(corpus: EvaluationCorpus) -> None:
-    """The shared fit must reproduce Milestone A's reported comparison exactly.
+def test_matches_ensemble_evaluation_headline_numbers(corpus: EvaluationCorpus) -> None:
+    """The shared fit must reproduce the ensemble evaluation's reported comparison exactly.
 
     Not approximately: both paths run the same layers on the same corpus with
     the same seeds, so any difference is a defect in one of them rather than
     tolerable numerical noise.
     """
-    milestone_a = run_milestone_a(corpus)
+    ensemble_report = run_ensemble_evaluation(corpus)
     fit = fit_pipeline(corpus)
     labels, baseline_score, ensemble_score = fit.test_slice()
 
@@ -54,11 +54,11 @@ def test_matches_milestone_a_headline_numbers(corpus: EvaluationCorpus) -> None:
         ensemble_score >= fit.threshold, labels
     )
 
-    assert fit.threshold == pytest.approx(milestone_a.chosen_calibration.threshold)
-    assert baseline_precision == pytest.approx(milestone_a.baseline_precision)
-    assert baseline_recall == pytest.approx(milestone_a.baseline_recall)
-    assert ensemble_precision == pytest.approx(milestone_a.ensemble_precision)
-    assert ensemble_recall == pytest.approx(milestone_a.ensemble_recall)
+    assert fit.threshold == pytest.approx(ensemble_report.chosen_calibration.threshold)
+    assert baseline_precision == pytest.approx(ensemble_report.baseline_precision)
+    assert baseline_recall == pytest.approx(ensemble_report.baseline_recall)
+    assert ensemble_precision == pytest.approx(ensemble_report.ensemble_precision)
+    assert ensemble_recall == pytest.approx(ensemble_report.ensemble_recall)
 
 
 def test_ensemble_score_reproduces_the_ensemble_verdict(corpus: EvaluationCorpus) -> None:

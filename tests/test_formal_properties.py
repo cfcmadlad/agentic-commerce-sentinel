@@ -8,7 +8,7 @@ from formal.properties import all_properties
 
 
 def test_exactly_eight_properties() -> None:
-    """The milestone's brief asked for 5-8 properties; this project ships all 8 planned."""
+    """This project ships all 8 planned safety properties."""
     assert len(all_properties()) == 8
 
 
@@ -31,7 +31,7 @@ def test_every_property_formula_is_a_boolean_expression() -> None:
         assert z3.is_bool(prop.formula)
 
 
-def test_every_layer_from_the_milestone_is_represented() -> None:
+def test_every_deterministic_layer_is_represented() -> None:
     """Layers 1, 2, and 2.5 must each have at least one property, plus the combination logic."""
     layers = [prop.layer for prop in all_properties()]
     assert any("Layer 1" in layer for layer in layers)

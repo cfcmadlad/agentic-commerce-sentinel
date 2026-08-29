@@ -1,4 +1,4 @@
-"""End-to-end Milestone A evaluation: behavioral model, ensemble, significance.
+"""End-to-end ensemble evaluation: behavioral model, ensemble, significance.
 
 Runs the full pipeline over one corpus: causal feature extraction across the
 whole chronological session stream, a chronological train/validation/test
@@ -70,8 +70,8 @@ class VariantRecallComparison:
 
 
 @dataclass(frozen=True)
-class MilestoneAReport:
-    """Everything the Milestone A gate decision rests on.
+class EnsembleEvaluationReport:
+    """Everything the ensemble-vs-baseline gate decision rests on.
 
     Attributes:
         n_sessions: Total corpus size.
@@ -136,14 +136,14 @@ def _extract_features_causally(sessions: tuple[LabeledSession, ...]) -> np.ndarr
     return np.array([[row[name] for name in names] for row in rows])
 
 
-def run_milestone_a(
+def run_ensemble_evaluation(
     corpus: EvaluationCorpus,
     train_fraction: float = DEFAULT_TRAIN_FRACTION,
     validation_fraction: float = DEFAULT_VALIDATION_FRACTION,
     cost_ratio: float = DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO,
     random_state: int = 42,
-) -> MilestoneAReport:
-    """Runs the full Milestone A pipeline against a corpus.
+) -> EnsembleEvaluationReport:
+    """Runs the full ensemble-evaluation pipeline against a corpus.
 
     Args:
         corpus: A chronologically ordered mixed corpus, as built by
@@ -168,7 +168,7 @@ def run_milestone_a(
             silently downgraded.
     """
     if not corpus.labeled_sessions:
-        raise ValueError("cannot run Milestone A over an empty corpus")
+        raise ValueError("cannot run the ensemble evaluation over an empty corpus")
 
     sessions = corpus.labeled_sessions
     n = len(sessions)
@@ -243,14 +243,14 @@ def run_milestone_a(
     top_attribution = top_features(attribution, top_n=DEFAULT_ATTRIBUTION_TOP_N)
 
     logger.info(
-        "milestone A: baseline recall=%.4f ensemble recall=%.4f beats_baseline=%s p=%.4g",
+        "ensemble evaluation: baseline recall=%.4f ensemble recall=%.4f beats_baseline=%s p=%.4g",
         baseline_recall,
         ensemble_recall,
         beats_baseline,
         significance.p_value,
     )
 
-    return MilestoneAReport(
+    return EnsembleEvaluationReport(
         n_sessions=n,
         n_train_residual=int(train_residual_mask.sum()),
         n_validation_residual=int(validation_residual_mask.sum()),
@@ -315,8 +315,8 @@ def _compare_variants(
     )
 
 
-def format_milestone_a_report(report: MilestoneAReport) -> str:
-    """Renders a Milestone A report as plain text.
+def format_ensemble_evaluation_report(report: EnsembleEvaluationReport) -> str:
+    """Renders an ensemble-evaluation report as plain text.
 
     Args:
         report: The report to render.
@@ -325,7 +325,7 @@ def format_milestone_a_report(report: MilestoneAReport) -> str:
         A human-readable multi-line summary.
     """
     lines = [
-        "Milestone A: behavioral model + ensemble vs rules-only baseline",
+        "Behavioral model + ensemble vs rules-only baseline",
         f"  sessions               {report.n_sessions}",
         f"  train residual rows    {report.n_train_residual}",
         f"  validation resid rows  {report.n_validation_residual}",

@@ -1,4 +1,4 @@
-"""JSON serialization of a `MilestoneBReport`, for the static metrics dashboard.
+"""JSON serialization of a `FullEvaluationReport`, for the static metrics dashboard.
 
 The frontend's metrics view is a static export, not a live API: it renders
 whatever this module wrote to disk. That means this file is the one place
@@ -19,15 +19,15 @@ from typing import Any
 from eval.bootstrap import BootstrapInterval
 from eval.cost_sweep import CostSweep, CostSweepPoint
 from eval.delong import DeLongResult
-from eval.latency import LatencyReport
-from eval.metrics import CalibrationCurve
-from eval.milestone_b import (
+from eval.full_evaluation import (
     ClassBreakdown,
+    FullEvaluationReport,
     GateAssessment,
-    MilestoneBReport,
     ScoreSummary,
     VariantComparison,
 )
+from eval.latency import LatencyReport
+from eval.metrics import CalibrationCurve
 from eval.sensitivity import GridOutcome, SensitivityReport
 from eval.significance import McNemarResult
 
@@ -327,15 +327,15 @@ def _gate_to_dict(gate: GateAssessment) -> dict[str, Any]:
     }
 
 
-def milestone_b_report_to_dict(
-    report: MilestoneBReport, cost_sweep_stride: int = COST_SWEEP_EXPORT_STRIDE
+def full_evaluation_report_to_dict(
+    report: FullEvaluationReport, cost_sweep_stride: int = COST_SWEEP_EXPORT_STRIDE
 ) -> dict[str, Any]:
     """Converts a full evaluation report into a JSON-safe dict.
 
     This is the single source of truth for the static metrics dashboard --
     every number the frontend renders comes from this export, not from a
     hand-copied figure, so the dashboard cannot drift from what
-    `run_milestone_b.py` actually measured.
+    `run_full_eval.py` actually measured.
 
     Args:
         report: The report to serialize.

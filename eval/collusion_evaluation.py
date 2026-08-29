@@ -11,9 +11,9 @@ deliberately asymmetric:
 - A **legitimate hard-negative group** (household, shared gateway) or a
   **baseline agent** counts as a false positive if it appears in *any*
   flagged community at all, majority or not -- a single innocent agent
-  swept into a flagged ring is exactly the cost this milestone's brief
-  treats as first-class, not something a majority-overlap threshold should
-  average away.
+  swept into a flagged ring is exactly the cost this evaluation treats as
+  first-class, not something a majority-overlap threshold should average
+  away.
 """
 
 from __future__ import annotations

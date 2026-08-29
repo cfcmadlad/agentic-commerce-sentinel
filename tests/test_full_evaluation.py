@@ -15,12 +15,12 @@ import pytest
 
 from detect.calibration import DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO
 from eval.cost_sweep import sweep_thresholds
-from eval.milestone_b import (
+from eval.full_evaluation import (
+    FullEvaluationReport,
     GateAssessment,
-    MilestoneBReport,
     _assess_gate,
-    format_milestone_b_report,
-    run_milestone_b,
+    format_full_evaluation_report,
+    run_full_evaluation,
 )
 from generator.attacks.corpus import EvaluationCorpus, build_evaluation_corpus
 
@@ -29,7 +29,7 @@ _CORPUS_SEED = 42
 
 
 @pytest.fixture(scope="module")
-def report() -> MilestoneBReport:
+def report() -> FullEvaluationReport:
     """Runs the evaluation once and shares it across the module's tests.
 
     The sensitivity grid is skipped here and covered by `test_sensitivity.py`;
@@ -40,7 +40,7 @@ def report() -> MilestoneBReport:
         The report.
     """
     corpus = build_evaluation_corpus(_CORPUS_SESSIONS, seed=_CORPUS_SEED)
-    return run_milestone_b(
+    return run_full_evaluation(
         corpus,
         n_resamples=120,
         latency_sessions=400,
@@ -71,7 +71,7 @@ def _gate_case(
     )
 
 
-def test_report_covers_every_committed_metric(report: MilestoneBReport) -> None:
+def test_report_covers_every_committed_metric(report: FullEvaluationReport) -> None:
     """Each deliverable the project committed to must be present in the report."""
     assert report.ensemble_scores.auc_pr.n_resamples == 120
     assert report.ensemble_scores.auc_roc.point_estimate > 0.0
@@ -92,7 +92,7 @@ def test_report_covers_every_committed_metric(report: MilestoneBReport) -> None:
     assert report.layer3_scores.auc_pr.point_estimate > 0.0
 
 
-def test_auc_pr_is_the_headline_and_beats_the_baseline(report: MilestoneBReport) -> None:
+def test_auc_pr_is_the_headline_and_beats_the_baseline(report: FullEvaluationReport) -> None:
     """The ensemble's ranking must be clearly better than a block/allow verdict."""
     assert report.ensemble_scores.auc_pr.point_estimate > report.baseline_scores.auc_pr.point_estimate
     assert report.ensemble_scores.is_binary_score is False
@@ -100,7 +100,7 @@ def test_auc_pr_is_the_headline_and_beats_the_baseline(report: MilestoneBReport)
 
 
 def test_layer3_is_scored_on_the_residual_not_the_full_block(
-    report: MilestoneBReport,
+    report: FullEvaluationReport,
 ) -> None:
     """Layer 3's own figure must describe the rows the rules could not resolve.
 
@@ -116,20 +116,20 @@ def test_layer3_is_scored_on_the_residual_not_the_full_block(
     )
 
 
-def test_intervals_bracket_their_point_estimates(report: MilestoneBReport) -> None:
+def test_intervals_bracket_their_point_estimates(report: FullEvaluationReport) -> None:
     """Every reported interval must contain the number it qualifies."""
     for summary in (report.baseline_scores, report.ensemble_scores):
         for interval in (summary.auc_pr, summary.auc_roc):
             assert interval.lower <= interval.point_estimate <= interval.upper
 
 
-def test_delong_flags_the_binary_baseline(report: MilestoneBReport) -> None:
+def test_delong_flags_the_binary_baseline(report: FullEvaluationReport) -> None:
     """The degeneracy caveat must be carried on the result, not left to prose."""
     assert report.gate.delong is not None
     assert report.gate.delong.baseline_is_degenerate is True
 
 
-def test_rules_invisible_variants_are_marked(report: MilestoneBReport) -> None:
+def test_rules_invisible_variants_are_marked(report: FullEvaluationReport) -> None:
     """The two variants Layer 3 exists for must be identifiable in the table."""
     marked = {c.variant for c in report.variant_comparison if c.is_rules_invisible}
     assert marked <= {"rapid_reuse", "behavioral_only"}
@@ -138,13 +138,13 @@ def test_rules_invisible_variants_are_marked(report: MilestoneBReport) -> None:
             assert comparison.rules_recall == pytest.approx(0.0)
 
 
-def test_ensemble_never_loses_recall_on_any_variant(report: MilestoneBReport) -> None:
+def test_ensemble_never_loses_recall_on_any_variant(report: FullEvaluationReport) -> None:
     """Layer 3 only adds blocks, so per-variant recall can never fall."""
     for comparison in report.variant_comparison:
         assert comparison.ensemble_recall >= comparison.rules_recall - 1e-12
 
 
-def test_class_breakdown_totals_agree_between_systems(report: MilestoneBReport) -> None:
+def test_class_breakdown_totals_agree_between_systems(report: FullEvaluationReport) -> None:
     """Both systems must be scored over the same test-block population."""
     baseline_totals = {b.attack_class: b.total for b in report.baseline_class_breakdown}
     ensemble_totals = {b.attack_class: b.total for b in report.ensemble_class_breakdown}
@@ -232,15 +232,15 @@ def test_gate_passes_on_an_unsaturated_baseline() -> None:
     assert "saturated" not in gate.rationale
 
 
-def test_gate_reads_fixed_recall_from_the_baseline(report: MilestoneBReport) -> None:
+def test_gate_reads_fixed_recall_from_the_baseline(report: FullEvaluationReport) -> None:
     """The comparison point must be the baseline's own recall, not an invented one."""
     assert report.gate.fixed_recall == pytest.approx(report.baseline_recall)
     assert report.gate.baseline_precision == pytest.approx(report.baseline_precision)
 
 
-def test_formatted_report_states_the_verdict_and_its_caveats(report: MilestoneBReport) -> None:
+def test_formatted_report_states_the_verdict_and_its_caveats(report: FullEvaluationReport) -> None:
     """A reader must not be able to find the verdict without its qualification."""
-    rendered = format_milestone_b_report(report)
+    rendered = format_full_evaluation_report(report)
 
     assert "HARD GATE" in rendered
     assert "VERDICT" in rendered
@@ -261,10 +261,10 @@ def test_formatted_report_states_the_verdict_and_its_caveats(report: MilestoneBR
 def test_report_is_reproducible() -> None:
     """The same corpus and seeds must produce the same headline numbers."""
     corpus = build_evaluation_corpus(1500, seed=7)
-    first = run_milestone_b(
+    first = run_full_evaluation(
         corpus, n_resamples=60, latency_sessions=200, run_sensitivity=False
     )
-    second = run_milestone_b(
+    second = run_full_evaluation(
         corpus, n_resamples=60, latency_sessions=200, run_sensitivity=False
     )
 
@@ -293,4 +293,4 @@ def test_rejects_an_empty_corpus() -> None:
         params_digest="",
     )
     with pytest.raises(ValueError, match="empty corpus"):
-        run_milestone_b(empty)
+        run_full_evaluation(empty)

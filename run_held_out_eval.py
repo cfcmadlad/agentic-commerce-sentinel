@@ -1,6 +1,6 @@
 """Command-line entry point for the one-shot held-out evaluation.
 
-Fits the ordinary three-class pipeline exactly as `run_milestone_b.py` does,
+Fits the ordinary three-class pipeline exactly as `run_full_eval.py` does,
 then applies the resulting frozen model and threshold to a held-out corpus
 containing only mandate-chaining / privilege-escalation attacks -- a class
 neither trained on nor tuned against. Nothing here retrains or recalibrates

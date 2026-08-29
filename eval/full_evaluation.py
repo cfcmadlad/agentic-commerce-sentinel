@@ -1,8 +1,9 @@
 """The full evaluation: ranking metrics, intervals, calibration, cost, latency.
 
-Milestone A established one thing -- that the ensemble beats the rules-only
-baseline on a paired McNemar test -- and deliberately deferred everything that
-would tell a reader how much to trust that. This module supplies the rest:
+The ensemble evaluation established one thing -- that the ensemble beats the
+rules-only baseline on a paired McNemar test -- and deliberately deferred
+everything that would tell a reader how much to trust that. This module
+supplies the rest:
 AUC-PR with bootstrap confidence intervals, AUC-ROC and a DeLong comparison,
 a calibration curve and Brier score, per-class and per-variant breakdowns for
 both systems, a cost sweep across the entire threshold range, end-to-end
@@ -218,7 +219,7 @@ class GateAssessment:
 
 
 @dataclass(frozen=True)
-class MilestoneBReport:
+class FullEvaluationReport:
     """Everything the full evaluation produced.
 
     Attributes:
@@ -630,7 +631,7 @@ def _measure_latency(fit: PipelineFit, n_latency_sessions: int) -> LatencyReport
     return measure_latency(pipeline, traces)
 
 
-def run_milestone_b(
+def run_full_evaluation(
     corpus: EvaluationCorpus,
     cost_ratio: float = DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO,
     n_resamples: int = DEFAULT_RESAMPLES,
@@ -638,7 +639,7 @@ def run_milestone_b(
     sensitivity_sessions: int = DEFAULT_SENSITIVITY_SESSIONS,
     latency_sessions: int = DEFAULT_LATENCY_SESSIONS,
     run_sensitivity: bool = True,
-) -> MilestoneBReport:
+) -> FullEvaluationReport:
     """Runs the complete evaluation against a corpus.
 
     Args:
@@ -723,7 +724,7 @@ def run_milestone_b(
 
     attribution = compute_attribution(fit.model, fit.features[residual_test])
 
-    report = MilestoneBReport(
+    report = FullEvaluationReport(
         n_sessions=len(sessions),
         n_test=int(test_mask.sum()),
         attack_base_rate=corpus.attack_base_rate,
@@ -755,7 +756,7 @@ def run_milestone_b(
         top_attribution_features=top_features(attribution, top_n=DEFAULT_ATTRIBUTION_TOP_N),
     )
     logger.info(
-        "milestone B: ensemble AUC-PR=%.4f [%.4f, %.4f], gate verdict=%s",
+        "full evaluation: ensemble AUC-PR=%.4f [%.4f, %.4f], gate verdict=%s",
         report.ensemble_scores.auc_pr.point_estimate,
         report.ensemble_scores.auc_pr.lower,
         report.ensemble_scores.auc_pr.upper,
@@ -814,7 +815,7 @@ def _format_class_breakdown(
     return lines
 
 
-def format_milestone_b_report(report: MilestoneBReport) -> str:
+def format_full_evaluation_report(report: FullEvaluationReport) -> str:
     """Renders the full evaluation as plain text.
 
     Ordered so the gate verdict is readable near the top without scrolling

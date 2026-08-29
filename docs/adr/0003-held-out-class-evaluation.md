@@ -7,8 +7,7 @@ Accepted. This is a record of a measurement, not a decision to be revisited.
 
 The project's taxonomy names a fourth attack class -- mandate chaining /
 privilege escalation -- that was deliberately never generated, referenced, or
-looked at while Layers 1-3 were designed, trained, or tuned (Milestones A and
-B). The generator for this class was authored in an isolated context with no
+looked at while Layers 1-3 were designed, trained, or tuned. The generator for this class was authored in an isolated context with no
 visibility into this project's detector internals, briefed only on the
 mandate schema and the taxonomy's one-sentence definition; the authoring
 process never read `detect/`, `features/`, `eval/`, or the three existing
@@ -42,7 +41,7 @@ generated in the training path" guarantee cannot silently erode.
 ## The evaluation
 
 `run_held_out_eval.py` fits the ordinary three-class pipeline at exactly the
-parameters the committed Milestone B headline run used (`n_legitimate=20000,
+parameters the committed full-evaluation headline run used (`n_legitimate=20000,
 seed=42`), producing a byte-identical model and threshold to the one already
 reported. That fit is then applied, unmodified, to a held-out corpus
 (`n_legitimate=20000, seed=90042, attack_base_rate=0.15`) containing only
@@ -59,7 +58,7 @@ the first version of this ADR, and why the finding itself did not change.)
 
 | | Recall |
 |---|---|
-| In-distribution ensemble recall (Milestone B test block, for reference) | 99.76% |
+| In-distribution ensemble recall (full-evaluation test block, for reference) | 99.76% |
 | Held-out rules-only (Layer 1+2) recall | 0.00% |
 | Held-out ensemble recall | 0.00% |
 | Degradation | 99.76 points |
@@ -120,21 +119,21 @@ than softened, re-run under different generator parameters, or quietly left
 out of the headline evaluation section.
 
 **No code in `detect/`, `features/`, or the generator's attack-side tuning
-was changed in response to this result during the milestone that produced
-it.** Doing so would have been tuning a detector against the exact test
+was changed in response to this result.** Doing so would have been tuning a
+detector against the exact test
 meant to measure whether it generalizes -- the one thing this entire
 methodology (fresh-context authorship, file-level import isolation,
 evaluate-exactly-once) was built to prevent.
 
-This finding belongs to Milestone D (the reasoning/audit layer) and
-Milestone H (`EXCEPTIONS.md`) as real input: a plain-language explanation of
+This finding belongs to the reasoning/audit layer (`/reasoning`) and
+`EXCEPTIONS.md` as real input: a plain-language explanation of
 *why* a chaining session was allowed should be able to say, honestly, "no
 layer in this system currently checks a mandate against its parent's
 authority" -- which is a stronger, more credible answer to a panel question
 than a system that either doesn't know it has this gap or hides it.
 
 A Layer 2.5 (mandate-chain scope containment) has since been built as a
-legitimate, separate design decision for a later milestone, with its own
+legitimate, separate design decision, with its own
 reasoning recorded rather than as a reflexive same-session patch -- see
 `docs/adr/0004-delegation-chain-containment.md` for its design, its own
 once-only evaluation against this same held-out corpus, and what it does and

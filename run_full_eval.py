@@ -7,7 +7,7 @@ breakdowns, a full-range false-positive cost sweep, end-to-end per-decision
 latency percentiles, and a sensitivity analysis across a grid of generator
 parameters. Reproduces from a clean clone with a single command:
 
-    python run_milestone_b.py --n-legitimate 20000 --seed 42
+    python run_full_eval.py --n-legitimate 20000 --seed 42
 
 The sensitivity grid regenerates and retrains the whole stack at every point,
 so it dominates the runtime. `--skip-sensitivity` exists for iterating on the
@@ -22,13 +22,13 @@ import logging
 import sys
 from pathlib import Path
 
-from eval.milestone_b import (
+from eval.full_evaluation import (
     DEFAULT_LATENCY_SESSIONS,
     DEFAULT_SENSITIVITY_SESSIONS,
-    format_milestone_b_report,
-    run_milestone_b,
+    format_full_evaluation_report,
+    run_full_evaluation,
 )
-from eval.report_json import milestone_b_report_to_dict
+from eval.report_json import full_evaluation_report_to_dict
 from generator.attack_config import DEFAULT_ATTACK_BASE_RATE
 from generator.attacks.corpus import build_evaluation_corpus
 
@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
     kwargs = {} if args.cost_ratio is None else {"cost_ratio": args.cost_ratio}
     try:
-        report = run_milestone_b(
+        report = run_full_evaluation(
             corpus,
             n_resamples=args.bootstrap_resamples,
             sensitivity_sessions=args.sensitivity_sessions,
@@ -124,12 +124,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"could not run the evaluation: {error}", file=sys.stderr)
         return 1
 
-    print(format_milestone_b_report(report))
+    print(format_full_evaluation_report(report))
 
     if args.json_out is not None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(
-            json.dumps(milestone_b_report_to_dict(report), indent=2), encoding="utf-8"
+            json.dumps(full_evaluation_report_to_dict(report), indent=2), encoding="utf-8"
         )
         print(f"\nwrote JSON report to {args.json_out}", file=sys.stderr)
 

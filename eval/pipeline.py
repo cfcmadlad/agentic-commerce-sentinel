@@ -1,13 +1,14 @@
 """One shared fit of the full detection stack, reusable by any evaluation.
 
-`eval/milestone_a.py` performs this fit inline and reduces it immediately to a
-precision/recall comparison. The fuller evaluation needs the same fit but keeps
-the intermediate products -- the trained model, the per-row scores, the split
-masks -- because AUC-PR, calibration, bootstrap intervals, DeLong and the cost
-sweep are all computed from them. Rather than restating that sequence a second
-time and risking two evaluation paths that quietly disagree, the sequence lives
-here once and `tests/test_pipeline.py` asserts that the numbers it produces
-match `run_milestone_a`'s on the same corpus.
+`eval/ensemble_evaluation.py` performs this fit inline and reduces it
+immediately to a precision/recall comparison. The fuller evaluation needs the
+same fit but keeps the intermediate products -- the trained model, the
+per-row scores, the split masks -- because AUC-PR, calibration, bootstrap
+intervals, DeLong and the cost sweep are all computed from them. Rather than
+restating that sequence a second time and risking two evaluation paths that
+quietly disagree, the sequence lives here once and `tests/test_pipeline.py`
+asserts that the numbers it produces match `run_ensemble_evaluation`'s on the
+same corpus.
 
 The scoring convention, which every metric downstream depends on
 ----------------------------------------------------------------

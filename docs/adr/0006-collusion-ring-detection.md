@@ -18,17 +18,19 @@ different kind of layer: it operates on the whole session graph, asking
 whether several ostensibly independent agents are, in fact, acting in
 coordination.
 
-**This targets a different attack class than Milestone C's disclosed gap,
-and makes no claim of having addressed it.** Milestone C and Milestone G are
-about one mandate's authority relative to its own delegation chain --
-whether a single principal's agent stayed inside what it was actually
-granted. Collusion is about whether *several distinct principals'* agents
-are secretly the same operator, or are cooperating to route a large
-combined action through many small, individually-unremarkable identities.
-A ring in this milestone's sense has no delegation relationship at all --
-every participant holds its own independently issued, correctly scoped
-mandate. Nothing here reads a `parent_mandate_id`, and nothing in Milestone
-C's or Milestone G's own gap is narrowed by this layer existing.
+**This targets a different attack class than the disclosed held-out
+mandate-chaining gap, and makes no claim of having addressed it.** The
+held-out gap and delegation-chain containment's own remaining gap
+(`docs/adr/0003`, `docs/adr/0004`) are about one mandate's authority
+relative to its own delegation chain -- whether a single principal's agent
+stayed inside what it was actually granted. Collusion is about whether
+*several distinct principals'* agents are secretly the same operator, or
+are cooperating to route a large combined action through many small,
+individually-unremarkable identities. A ring in this layer's sense has no
+delegation relationship at all -- every participant holds its own
+independently issued, correctly scoped mandate. Nothing here reads a
+`parent_mandate_id`, and neither of those other gaps is narrowed by this
+layer existing.
 
 ## Design
 
@@ -54,8 +56,8 @@ each signal can be evaluated on its own:
 
 ### Two hard negatives, deliberately close to the malicious archetypes
 
-Per this milestone's own brief: false positives on ordinary shared
-infrastructure are a first-class evaluation target, not an afterthought.
+False positives on ordinary shared infrastructure are a first-class
+evaluation target here, not an afterthought.
 
 - **`legitimate_household`** -- three agents genuinely sharing one home
   device, but transacting independently: different merchants, timing spread
@@ -76,8 +78,8 @@ are agents, edges form from (a) a fingerprint shared by two agents, or (b) a
 **multi-agent burst** -- a maximal chronological cluster of same-merchant
 sessions, every consecutive pair inside a coordination window, containing
 at least `min_burst_agents` distinct agents. `collusion/community.py`
-applies `networkx`'s Louvain implementation (the brief's own named
-algorithm, not reimplemented by hand) to surface candidate communities of
+applies `networkx`'s Louvain implementation (the standard algorithm for
+this kind of problem, not reimplemented by hand) to surface candidate communities of
 size two or more. `collusion/scoring.py` computes a risk score per
 candidate from two signals -- a size-driven fingerprint signal and a
 multi-agent structuring ratio, both defined precisely below -- and
@@ -163,7 +165,7 @@ a knife-edge: recall stays at 100% through threshold 0.40 before
 
 ## The honest limit: density sensitivity, measured and reported, not tuned away
 
-Per this milestone's own evaluation-honesty discipline (the same one
+Per this project's own evaluation-honesty discipline (the same one
 `docs/adr/0001`'s sensitivity grid and `docs/adr/0004`'s per-variant
 breakdown already hold to): the clean result above depends on baseline
 traffic density relative to the fixed 40-agent pool, and that dependence is
@@ -184,15 +186,16 @@ coincidental multi-agent bursts at a popular merchant become common enough
 that a real ring's own burst occasionally absorbs an unrelated bystander
 whose own ordinary session happened to land in the same narrow window.
 `generator/config.py::AGENT_POOL_SIZE` (40) is a shared, frozen constant
-this milestone does not touch (see Consequences below); the reported
-evaluation instead uses a baseline volume this milestone's own calibration
+this layer does not touch (see Consequences below); the reported
+evaluation instead uses a baseline volume this layer's own calibration
 confirmed sits comfortably in the clean region, and the degradation above
 is stated as a known operating boundary, not silently avoided.
 
 ## Consequences
 
-**Per the standing constraint this project has held since Milestone C, this
-milestone did not touch `detect/`, `features/`, `containment/`, or any file
+**Per the standing constraint this project has held since the held-out
+evaluation (`docs/adr/0003`), this layer did not touch `detect/`,
+`features/`, `containment/`, or any file
 `generator/attacks/corpus.py` or `docs/adr/0003`'s frozen held-out corpus
 depends on.** `generator/collusion/` and `collusion/` are new, additive
 packages. `generator/config.py::AGENT_POOL_SIZE` was read, not modified --
@@ -203,7 +206,7 @@ that existing, shared constant, not a case for changing it.
 SessionTrace`.** Doing so would touch the schema every existing frozen
 corpus and detector consumes. It is out-of-band, session-keyed metadata
 instead (`generator/collusion/fingerprint.py`), produced and consumed only
-by this milestone's own code -- the same pattern `mandate.schema.
+by this package's own code -- the same pattern `mandate.schema.
 SignedMandate` already uses (attached to a session by ID, not embedded in
 it).
 
@@ -212,5 +215,4 @@ side has a genuine, named operating boundary.** Both are stated in this
 document, not just the flattering half. Closing the density-sensitivity gap
 further -- a richer edge-weighting scheme, or a burst-purity check that
 distinguishes a ring's core from an incidental bystander -- is legitimate
-future work, not attempted reactively in this milestone in response to
-seeing the number.
+future work, not attempted reactively in response to seeing the number.

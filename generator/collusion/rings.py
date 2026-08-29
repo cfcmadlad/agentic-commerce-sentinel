@@ -5,8 +5,9 @@ correctly signed, and inside its own mandate's scope -- Layers 1, 2, and 2.5
 have no structural reason to object to any single one. The coordination is
 the only thing wrong, and it is only visible across sessions and agents,
 which is exactly the gap `collusion/` exists to close (and exactly why this
-is a different class of coverage from Milestone C's disclosed single-session
-gap or Milestone G's single-chain gap -- see `docs/adr/0006`).
+is a different class of coverage from the disclosed held-out mandate-
+chaining gap or delegation-chain containment's own single-chain gap -- see
+`docs/adr/0006`).
 
 Three malicious archetypes, isolating one signal each:
 
@@ -22,9 +23,9 @@ Three malicious archetypes, isolating one signal each:
   fingerprint and no single dominant counterparty. Isolates ring topology
   from either of the two signals above.
 
-Two legitimate negative archetypes, deliberately hard, per this milestone's
-own brief ("rings must not fire on ordinary shared-infrastructure cases...
-a first-class false-positive class, not an afterthought"):
+Two legitimate negative archetypes, deliberately hard: rings must not fire on
+ordinary shared-infrastructure cases, and that is treated as a first-class
+false-positive class here, not an afterthought.
 
 - `legitimate_household` -- a small group genuinely sharing one device (a
   family), but transacting independently: different merchants, uncorrelated

@@ -14,9 +14,9 @@ Two signals, combined:
   own amounts, requiring more than one agent's contribution is deliberate:
   without it, one member's own single large purchase (log-normal amounts
   occasionally land well above the median on their own) reads as
-  "structuring" even with zero coordination, which is exactly the false
-  positive this milestone's brief warns against. Found and fixed during
-  this milestone's own calibration -- see `docs/adr/0006`.
+  "structuring" even with zero coordination -- exactly the false positive
+  this signal is designed to avoid. Found and fixed during calibration --
+  see `docs/adr/0006`.
 
 Both are computed directly from `SessionTrace` and the session-keyed
 fingerprint mapping -- never from ground truth. Weights and saturation

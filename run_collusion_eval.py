@@ -13,7 +13,7 @@ arbitrary: `generator/config.py`'s agent pool is a fixed 40 agents, and
 baseline-agent false positives rise sharply once average per-agent session
 volume over the 30-day generation horizon gets high enough that coincidental
 multi-agent bursts at a shared merchant become common -- measured directly
-during this milestone's own calibration, not assumed. See
+during calibration, not assumed. See
 `docs/adr/0006-collusion-ring-detection.md` for the full density-sensitivity
 finding, reported honestly rather than tuned away.
 """

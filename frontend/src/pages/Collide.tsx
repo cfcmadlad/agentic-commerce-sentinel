@@ -14,7 +14,7 @@ import {
  *
  * Every point here is one real session from `run_collision_export.py`'s
  * output (`public/collision.json`) -- its real ensemble score, from the
- * same frozen fit Milestone B and the held-out evaluation report on. There
+ * same frozen fit the full evaluation and the held-out evaluation report on. There
  * is no synthesized data in this file; only the horizontal position (a log
  * scale of the real score) carries meaning, vertical position is pure
  * jitter for visual separation, stated plainly in the caption rather than
@@ -26,7 +26,7 @@ import {
  * try, yourself, to find a threshold that catches `mandate_chaining`
  * without blocking most legitimate traffic. You won't find one, because
  * the scores are not separable in this dimension -- which is the real,
- * disclosed finding from Milestone C, made falsifiable instead of just
+ * disclosed held-out-evaluation finding, made falsifiable instead of just
  * asserted.
  */
 

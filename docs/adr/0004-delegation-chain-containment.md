@@ -17,9 +17,10 @@ was a total miss -- 0.00% recall on every mandate-chaining sub-variant, both
 rules-only and ensemble -- and the standing constraint that ADR exists to
 enforce is explicit: no code in `detect/`, `features/`, or the generator was
 to change in reaction to that number, and any future chain-aware check would
-be "a legitimate, separate design decision for a future milestone."
+be a legitimate, separate design decision, made and reasoned about on its
+own terms.
 
-This is that milestone. Layer 2.5 is a new package (`containment/`), not a
+This document is that decision. Layer 2.5 is a new package (`containment/`), not a
 modification to `detect/`, `features/`, or the generator's attack-side
 tuning. Nothing in `detect/scope.py`, `detect/behavioral.py`,
 `features/session.py`, or any attack generator was touched to build it. It
@@ -97,7 +98,7 @@ refuses to let a mandate ID that resolves to two different pieces of content
 silently pick one arbitrarily. It drops the ID from the index entirely, so
 `get()` reports it as unresolvable, and containment fails closed on it the
 same way it fails closed on a cycle. This defense-in-depth check found a real
-bug during this milestone's own development -- see the addendum in
+bug during this layer's own development -- see the addendum in
 `docs/adr/0003-held-out-class-evaluation.md` for the full account of the
 mandate-ID-collision issue it caught in `generator/attacks/held_out.py`, and
 why that bug is now fixed at its root as well, not just contained here. Both
@@ -161,9 +162,9 @@ to catch, and each is caught on every one of its held-out sessions.
 
 ### `fanout_structuring`: caught at 75.46%, exactly the partial result expected
 
-Predicted in advance, in the brief this layer was built from: "small-siblings
-structuring is expected to survive it." It mostly does not, but not
-completely, and the shape of the miss is precise rather than random. Each
+Predicted in advance, before this layer's own evaluation ran: small-siblings
+structuring was expected to mostly survive containment. It mostly does not,
+but not completely, and the shape of the miss is precise rather than random. Each
 fan-out group is several siblings chained from one parent, minted in close
 succession, each individually within its own ceiling but summing well past
 the parent's. Processed in chronological order: the first sibling in a group
@@ -203,17 +204,17 @@ reason, never a scope or expiry reason.
 Closing it needs a different kind of check -- whether the receiving agent
 identity appears anywhere the user actually consented to, which is an
 authorization-provenance question, not an authority-width one -- and that is
-real, undone work for a future milestone, not a same-session patch to this
+real, undone work for a future decision, not a same-session patch to this
 layer's rule set.
 
 ## Consequences
 
 **Per the same standing constraint `docs/adr/0003` established, this
-milestone did not touch `detect/`, `features/`, or the generator's
+layer did not touch `detect/`, `features/`, or the generator's
 attack-side tuning.** The one change adjacent to the generator
 (`generator/attacks/held_out.py::SEED_OFFSET_CHAINING`) is documented
 separately, in `docs/adr/0003`'s own addendum, as a mandate-ID-uniqueness
-correctness fix this milestone's development surfaced -- not a reaction to
+correctness fix this layer's development surfaced -- not a reaction to
 any recall number, and not a change to attack difficulty, generation logic,
 or any tuning parameter.
 

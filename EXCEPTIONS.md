@@ -58,7 +58,7 @@ which is a different kind of property than anything Layer 2.5 currently checks. 
 `fanout_structuring` share: nothing short-circuits the "first sibling looks ordinary" problem within a
 single deterministic pass — a behavioral feature comparing a mandate's sibling count or fan-out rate
 against its own agent's history is the more plausible fix, and Layer 3 does not currently have one. Per
-the project's own standing constraint, this is a legitimate future milestone with its own design
+the project's own standing constraint, this is legitimate future work with its own design
 reasoning, not a same-session patch written in reaction to these numbers.
 
 **Reproduce with:**
@@ -73,7 +73,7 @@ python run_containment_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legit
 
 **What it is.** Even restricted to the three attack classes this system is actually trained and
 tuned against, the deployed operating threshold does not achieve literal 100% recall. On the
-Milestone B test block (411 attacks), the `behavioral_only` impersonation variant is caught at
+full-evaluation test block (411 attacks), the `behavioral_only` impersonation variant is caught at
 98.21% recall (55 of 56) rather than 100% — the single miss behind the reported 99.76% ensemble
 recall figure.
 
@@ -85,7 +85,7 @@ that spectrum.
 
 **Closest signal that fired.** Its behavioral score was 0.00676, against an operating threshold of
 0.02513 — 27% of the threshold. That places it in the `behaviorally_ordinary` bucket by the same
-half-threshold convention Milestone C's held-out evaluation uses, not a near-miss the threshold could
+half-threshold convention the held-out evaluation uses, not a near-miss the threshold could
 plausibly be nudged to catch without moving a great many legitimate sessions with it (see the cost
 sweep in README §7: the threshold basin is broad, but not free to move).
 
@@ -95,7 +95,7 @@ honest cost of operating a probabilistic layer at a fixed cutoff, not as a bug t
 
 **Reproduce with:**
 ```bash
-python run_milestone_a.py --n-legitimate 20000 --seed 42
+python run_ensemble_eval.py --n-legitimate 20000 --seed 42
 ```
 (the per-variant recall table's `behavioral_only` row)
 
@@ -127,7 +127,7 @@ exception category rather than a general caveat.
 
 **Reproduce with:**
 ```bash
-python run_milestone_b.py --n-legitimate 20000 --seed 42
+python run_full_eval.py --n-legitimate 20000 --seed 42
 ```
 (the sensitivity grid section, `scripted_pacing_max35` row)
 
@@ -154,7 +154,7 @@ ambiguous cases, is the more plausible source.
 
 **Reproduce with:**
 ```bash
-python run_milestone_b.py --n-legitimate 20000 --seed 42
+python run_full_eval.py --n-legitimate 20000 --seed 42
 ```
 (the calibration section's reliability diagram)
 
@@ -182,11 +182,11 @@ confirmed by a dedicated analysis.
 — a grace period, a blended prior, or a separate lower-confidence review lane — is not currently
 implemented anywhere in this project. If the speculative cause above is confirmed by a proper
 per-session breakdown, that is the concrete next feature to design, not to retrofit into the frozen
-Milestone B model.
+full-evaluation model.
 
 **Reproduce with:**
 ```bash
-python run_milestone_b.py --n-legitimate 20000 --seed 42
+python run_full_eval.py --n-legitimate 20000 --seed 42
 ```
 (the cost-sweep table, `Blocked legitimate /10k` column at the deployed threshold)
 

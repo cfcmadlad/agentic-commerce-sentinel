@@ -1,11 +1,11 @@
-"""Command-line entry point for the Milestone A evaluation.
+"""Command-line entry point for the ensemble evaluation.
 
 Trains the Layer 3 behavioral model on the rules-allowed residual, ensembles
 it with the Layer 1/2 verdict, and reports the comparison against the
 rules-only baseline with a paired significance test. Reproduces from a clean
 clone with a single command:
 
-    python run_milestone_a.py --n-legitimate 20000 --seed 42
+    python run_ensemble_eval.py --n-legitimate 20000 --seed 42
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import argparse
 import logging
 import sys
 
-from eval.milestone_a import format_milestone_a_report, run_milestone_a
+from eval.ensemble_evaluation import format_ensemble_evaluation_report, run_ensemble_evaluation
 from generator.attack_config import DEFAULT_ATTACK_BASE_RATE
 from generator.attacks.corpus import build_evaluation_corpus
 
@@ -41,7 +41,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Runs the Milestone A pipeline and prints the report.
+    """Runs the ensemble-evaluation pipeline and prints the report.
 
     Args:
         argv: Argument list, excluding the program name. Defaults to sys.argv.
@@ -60,8 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     kwargs = {} if args.cost_ratio is None else {"cost_ratio": args.cost_ratio}
-    report = run_milestone_a(corpus, **kwargs)
-    print(format_milestone_a_report(report))
+    report = run_ensemble_evaluation(corpus, **kwargs)
+    print(format_ensemble_evaluation_report(report))
     return 0
 
 

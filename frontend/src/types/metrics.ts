@@ -1,8 +1,8 @@
 /**
  * Types for `frontend/public/metrics.json`, produced by
- * `run_milestone_b.py --json-out` via `eval/report_json.py`.
+ * `run_full_eval.py --json-out` via `eval/report_json.py`.
  *
- * This file's shape must track `milestone_b_report_to_dict` in
+ * This file's shape must track `full_evaluation_report_to_dict` in
  * eval/report_json.py field-for-field -- it is the one place a schema drift
  * between the Python export and the frontend would surface, since nothing
  * validates the JSON against this interface at load time. If a field is
@@ -161,7 +161,7 @@ export interface AttributionFeature {
 }
 
 /** The full evaluation report, as exported by eval/report_json.py. */
-export interface MilestoneBReport {
+export interface FullEvaluationReport {
   n_sessions: number;
   n_test: number;
   attack_base_rate: number;

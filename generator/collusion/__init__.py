@@ -14,7 +14,7 @@ A device/IP fingerprint is deliberately never added to `common.schema.
 SessionTrace` -- doing so would touch the shared schema every existing
 frozen corpus and detector consumes. It is out-of-band metadata instead, a
 `session_id -> DeviceFingerprint` mapping produced and consumed only by this
-milestone's own generator and detection code, the same way a presented
+package's own generator and detection code, the same way a presented
 mandate is attached to a session by ID rather than embedded in it.
 
 Defense-only, matching every other generator package in this project:

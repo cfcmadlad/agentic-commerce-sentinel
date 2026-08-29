@@ -2,13 +2,13 @@
 
 This module answers exactly one question, exactly once: how does the
 already-frozen Layers 1-3 pipeline -- trained and calibrated on the three
-known attack classes, with the threshold already committed in Milestone B --
+known attack classes, with the threshold already committed by the full evaluation --
 perform against mandate chaining / privilege escalation, a class it has
 never seen in training, calibration, or tuning?
 
 The scoring model is never retrained here. `run_held_out_evaluation` takes an
 already-`fit_pipeline`'d `PipelineFit` (fit against the ordinary three-class
-corpus, exactly as Milestone B did) and applies its frozen `model` and
+corpus, exactly as the full evaluation did) and applies its frozen `model` and
 `threshold` to a `EvaluationCorpus` built by
 `generator.attacks.held_out.build_held_out_corpus`. Only the deterministic
 rules layers (Layer 1/2) and feature extraction run fresh against the
@@ -98,7 +98,7 @@ class HeldOutReport:
         threshold: The frozen operating threshold applied (never recalibrated
             here).
         in_distribution_ensemble_recall: The frozen fit's own ensemble recall
-            on its own held-out test block (Milestone B's headline number),
+            on its own held-out test block (the full evaluation's headline number),
             for direct comparison against the number below.
         baseline_recall: Rules-only (Layer 1+2) recall on the held-out class,
             overall.
@@ -267,10 +267,12 @@ def format_held_out_report(report: HeldOutReport) -> str:
         f"  attack base rate       {report.attack_base_rate:.4f}",
         f"  frozen threshold       {report.threshold:.4f}",
         "",
-        f"  in-distribution ensemble recall (Milestone B test block)   {report.in_distribution_ensemble_recall:.4f}",
-        f"  held-out rules-only (Layer 1+2) recall                     {report.baseline_recall:.4f}",
-        f"  held-out ensemble recall                                   {report.ensemble_recall:.4f}",
-        f"  recall degradation (in-distribution minus held-out)        {report.recall_degradation:+.4f}",
+        f"  {'in-distribution ensemble recall (full-eval test block)':<57} "
+        f"{report.in_distribution_ensemble_recall:.4f}",
+        f"  {'held-out rules-only (Layer 1+2) recall':<57} {report.baseline_recall:.4f}",
+        f"  {'held-out ensemble recall':<57} {report.ensemble_recall:.4f}",
+        f"  {'recall degradation (in-distribution minus held-out)':<57} "
+        f"{report.recall_degradation:+.4f}",
         "",
         "Per-variant recall (rules-only -> ensemble):",
     ]

@@ -3,7 +3,7 @@
 Every number this project reports was measured on synthetic traffic, which
 means every number is conditional on the parameters that produced that
 traffic. The honest question is not whether the model performs well at one
-parameter setting -- it does, and that is Milestone A's result -- but how much
+parameter setting -- it does, and that is the ensemble evaluation's result -- but how much
 of that performance survives the setting being wrong. This module answers it by
 regenerating the corpus, retraining Layer 3, and re-evaluating from scratch at
 each point of a parameter grid, then reporting how far the headline numbers
@@ -439,7 +439,7 @@ def evaluate_grid(
 
     The per-point evaluation is injected rather than performed here, so this
     module owns the grid design and nothing else: the full metric computation
-    lives in `eval/milestone_b.py`, and importing it here would make the two
+    lives in `eval/full_evaluation.py`, and importing it here would make the two
     mutually dependent.
 
     Args:

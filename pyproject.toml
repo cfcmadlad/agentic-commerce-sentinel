@@ -21,13 +21,13 @@ dependencies = [
     # distro, sniffio, certifi into the closure, all pinned in
     # requirements-lock.txt.
     "groq==1.7.0",
-    # Milestone E: the API service wrapping the full pipeline.
+    # The API service wrapping the full pipeline.
     "fastapi==0.141.1",
     "uvicorn==0.52.4",
-    # Milestone P: Z3 SMT solver, formally verifying the deterministic
-    # layers' decision logic (never the ML ensemble -- see /formal).
+    # Z3 SMT solver, formally verifying the deterministic layers' decision
+    # logic (never the ML ensemble -- see /formal).
     "z3-solver==5.1.0.0",
-    # Milestone Q: graph construction and Louvain community detection for
+    # Graph construction and Louvain community detection for
     # cross-session/cross-agent collusion-ring detection -- see /collusion.
     "networkx==3.6.1",
 ]
@@ -39,7 +39,7 @@ dev = [
     "mypy==2.3.1",
     # Loads GROQ_API_KEY (and any other local secret) from a gitignored
     # .env file for local test runs (see tests/conftest.py). Dev-only: a
-    # real deployment (Milestone E's API service) sets environment
+    # real deployment (the API service) sets environment
     # variables through its own runtime, not a checked-out .env file.
     "python-dotenv==1.2.3",
 ]

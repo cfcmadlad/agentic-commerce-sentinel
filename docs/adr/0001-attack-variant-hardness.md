@@ -33,7 +33,7 @@ minority rather than majority pattern within the class.
   statistical significance under this setting, per project policy that is
   reported plainly and the model is dropped, not re-tuned against the
   held-out class or walked back to the easier bounds to manufacture a win.
-- Milestone A's own diagnostics confirmed that even under this harder
+- The ensemble evaluation's own diagnostics confirmed that even under this harder
   setting, the model's separation of `behavioral_only` is not attributable to
   a single feature: clock-time, amount, and session-composition features
   score at base-rate AUC-PR in isolation, and pacing alone (without

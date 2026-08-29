@@ -31,8 +31,8 @@ from generator.config import (
 from generator.legitimate import generate_legitimate_sessions
 
 # Digest of the 2,000-session legitimate corpus at seed 42 under the default
-# parameter set, captured from the generator as it stood when Milestone A's
-# numbers were measured. A change here means generated data has moved and every
+# parameter set, captured from the generator as it stood when the ensemble
+# evaluation's numbers were first measured. A change here means generated data has moved and every
 # previously reported metric needs re-deriving; it is not a value to update
 # casually to make a test pass.
 EXPECTED_LEGITIMATE_DIGEST = "75b9e322e87cb5cb827b608a4509754c14937c4c2b2139f2a4ba71cd16a3e212"

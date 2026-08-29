@@ -1,11 +1,10 @@
 """Louvain community detection over the agent graph.
 
-A thin, deterministic wrapper around `networkx`'s own Louvain implementation
--- the standard algorithm the brief for this milestone names directly
-("Louvain or similar"). Not reimplemented by hand: Louvain's modularity
-optimization is well-established and well-tested in `networkx` itself, and
-duplicating it would risk a subtly wrong reimplementation without adding
-anything this project needs to control.
+A thin, deterministic wrapper around `networkx`'s own Louvain implementation,
+the standard algorithm for this kind of community-detection problem. Not
+reimplemented by hand: Louvain's modularity optimization is well-established
+and well-tested in `networkx` itself, and duplicating it would risk a subtly
+wrong reimplementation without adding anything this project needs to control.
 """
 
 from __future__ import annotations

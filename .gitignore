@@ -16,7 +16,7 @@ dist/
 /artifacts/
 *.parquet
 
-# Milestone E's runtime audit log -- append-only, grows with every decision
+# API service's runtime audit log -- append-only, grows with every decision
 # a running service instance makes; not something to check in.
 service_audit.jsonl
 

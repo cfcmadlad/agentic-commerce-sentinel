@@ -4,11 +4,11 @@ Mirrors `eval/held_out_evaluation.py` exactly in evaluation discipline -- same
 frozen `PipelineFit`, same held-out corpus, evaluated once, nothing retrained
 or recalibrated in response to the result -- but inserts the new containment
 gate between Layer 1/2 and Layer 3, so three block sources are measured on
-the same held-out sessions: rules alone (Layer 1+2, exactly Milestone C's own
-number, for direct comparison), rules plus containment (Layer 1+2+2.5, the
-new layer's own contribution with the learned layer held out), and the full
-stack (Layer 1+2+2.5+3, the number this milestone's headline recall is drawn
-from).
+the same held-out sessions: rules alone (Layer 1+2, exactly the held-out
+evaluation's own number, for direct comparison), rules plus containment
+(Layer 1+2+2.5, the new layer's own contribution with the learned layer held
+out), and the full stack (Layer 1+2+2.5+3, the number this layer's headline
+recall is drawn from).
 
 Standing constraint, restated because it is easy to violate by reflex: the
 result this module produces must not be used to change `detect/`, `features/`,

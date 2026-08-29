@@ -18,9 +18,9 @@ Two kinds of abstraction are used, both stated explicitly per field:
 - **Bounded numeric/finite-set domains** for every comparison this project's
   real logic actually performs (amounts, timestamps, category membership,
   transaction counts, delegation depth). Bounded rather than left as Z3's
-  default unbounded integer sort, per this milestone's own scope constraint
-  -- see the module-level constants below for the exact bounds and why each
-  was chosen.
+  default unbounded integer sort, to keep every property checked within a
+  finite space -- see the module-level constants below for the exact
+  bounds and why each was chosen.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from containment.schema import MAX_DELEGATION_DEPTH
 # Every domain below is bounded to a value comfortably beyond anything the
 # real system would ever see, so every property is checked exhaustively
 # within a space large enough to be meaningful, without inviting the
-# unbounded-integer performance cliff the brief for this milestone warns
-# against.
+# unbounded-integer performance cliff that would otherwise make an
+# exhaustive check intractable.
 AMOUNT_LOWER_BOUND = 1
 AMOUNT_UPPER_BOUND = 100_000_000_00  # paise; matches this project's own paisa-quantized amounts
 TIME_LOWER_BOUND = 0
@@ -332,7 +332,7 @@ class ContainmentVars:
             hops were walked, and whether that walk hit a cycle or an
             unresolvable link. Free/abstracted rather than modeling the walk
             itself: the walk is graph traversal, not a policy decision; the
-            *bound* checked against its result is the policy this milestone
+            *bound* checked against its result is the policy this module
             verifies. See `docs/adr/0005` for this scope boundary stated in
             full.
     """

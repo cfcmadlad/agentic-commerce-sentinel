@@ -1,7 +1,7 @@
 """Shared, process-lifetime state for the API service.
 
 Fits the Layer 3 model once, at startup, against the exact same corpus
-parameters `run_milestone_b.py` reports numbers against -- the running
+parameters `run_full_eval.py` reports numbers against -- the running
 service scores every request with the identical model and threshold this
 project's own evaluation already measured, not a separately-tuned copy.
 This means a cold start takes as long as fitting that corpus does (tens of
@@ -47,7 +47,7 @@ from reasoning.narrate import DEFAULT_MODEL, GroqNarrationClient, NarrationClien
 
 logger = logging.getLogger(__name__)
 
-# Matches run_milestone_b.py's defaults exactly, so this service's model is
+# Matches run_full_eval.py's defaults exactly, so this service's model is
 # the one this project's own evaluation already reports on, not a second,
 # separately-parameterized fit.
 FITTING_N_LEGITIMATE = 20000

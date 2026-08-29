@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --no-deps -e .
 EXPOSE 8000
 
 # No --reload: this is the built image, not a dev loop. Startup fits Layer 3
-# against the same 20,000-session corpus run_milestone_b.py reports on
+# against the same 20,000-session corpus run_full_eval.py reports on
 # (service/state.py), so the container takes tens of seconds to become
 # ready -- add a healthcheck against /health in orchestration if that
 # matters for your deployment.

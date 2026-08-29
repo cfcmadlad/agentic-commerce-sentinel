@@ -25,8 +25,8 @@ from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[impo
 logger = logging.getLogger(__name__)
 
 # Not tuned via search; a reasonable starting configuration for a small,
-# high-class-imbalance tabular problem. Revisit if Milestone A's own
-# diagnostics (train/val gap, calibration curve) suggest under- or overfit.
+# high-class-imbalance tabular problem. Revisit if the ensemble evaluation's
+# own diagnostics (train/val gap, calibration curve) suggest under- or overfit.
 DEFAULT_RANDOM_STATE = 42
 DEFAULT_MAX_ITER = 200
 DEFAULT_MAX_DEPTH = 4

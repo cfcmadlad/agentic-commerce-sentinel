@@ -1,6 +1,6 @@
 """Command-line entry point exporting per-session scores for the frontend's interactive collision chart.
 
-Fits the same frozen pipeline Milestone B reports on, then scores the
+Fits the same frozen pipeline the full evaluation reports on, then scores the
 held-out mandate-chaining corpus against that already-frozen fit (never
 retraining or recalibrating, per `docs/adr/0003-held-out-class-evaluation.md`),
 and writes one JSON record per exported session: its real ensemble score,
@@ -102,7 +102,7 @@ def _in_distribution_points(fit: PipelineFit, rng: np.random.Generator) -> list[
     """Builds collision points from the test block's real scores and categories.
 
     Args:
-        fit: The frozen pipeline fit Milestone B reports on.
+        fit: The frozen pipeline fit the full evaluation reports on.
         rng: Seeded generator for the legitimate-session down-sample.
 
     Returns:

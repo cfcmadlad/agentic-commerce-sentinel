@@ -6,11 +6,11 @@ convention: `generator/attacks/corpus.py` (the training/tuning corpus
 builder) does not import this module, `generate_mandate_chaining_attacks`,
 or anything from it, so `build_evaluation_corpus` cannot produce a chaining
 session even under an accidental future parameter change --
-`tests/test_corpus_and_gate.py` and `tests/test_milestone_a.py` already pin
+`tests/test_corpus_and_gate.py` and `tests/test_ensemble_evaluation.py` already pin
 that guarantee for the training path, and this module never touches it.
 
 This corpus is evaluated exactly once, against the already-frozen Layers 1-3
-pipeline, after Milestones A and B were both committed. See
+pipeline. See
 `docs/adr/0003-held-out-class-evaluation.md` for the result and the standing
 constraint against tuning anything -- rules, features, or the model -- in
 response to it.
@@ -47,7 +47,7 @@ DEFAULT_HELD_OUT_ATTACK_BASE_RATE = 0.15
 # mandate_id collision between an unrelated legitimate mandate and a
 # chaining-generated one -- confirmed directly (a dozen colliding IDs in a
 # moderate-sized corpus, not a one-in-a-trillion fluke). This was invisible
-# to every existing consumer -- Layers 1-3, and Milestone C's own held-out
+# to every existing consumer -- Layers 1-3, and this module's own held-out
 # evaluation -- because none of them resolve a mandate by ID, only by
 # session, so a colliding ID never caused a wrong session to be scored. It
 # became visible only once Layer 2.5 (containment) needed to resolve an

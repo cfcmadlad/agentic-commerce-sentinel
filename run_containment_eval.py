@@ -1,6 +1,6 @@
 """Command-line entry point for the one-shot Layer 2.5 (containment) evaluation.
 
-Fits the ordinary three-class pipeline exactly as `run_milestone_b.py` and
+Fits the ordinary three-class pipeline exactly as `run_full_eval.py` and
 `run_held_out_eval.py` do, then applies the resulting frozen model and
 threshold -- plus the new containment gate -- to the same held-out corpus
 `run_held_out_eval.py` uses. Nothing here retrains or recalibrates anything,
@@ -29,8 +29,8 @@ DEFAULT_N_LEGITIMATE = 20000
 DEFAULT_SEED = 42
 DEFAULT_HELD_OUT_N_LEGITIMATE = 20000
 # Matches run_held_out_eval.py's own seed choice, so this evaluation is
-# scored against the identical held-out corpus Milestone C's own number was
-# measured on.
+# scored against the identical held-out corpus the held-out evaluation's
+# own number was measured on.
 DEFAULT_HELD_OUT_SEED = 90042
 
 

@@ -19,9 +19,9 @@ import { AgentMark, BrandMark } from "./icons";
  * live chat: there is no text input, and the caption says "replayed," not
  * "live," on purpose. A real interactive version of this idea -- a
  * live-or-recorded narration chat against the actual running API, with a
- * delegation graph -- is Milestone N, a separate, much larger piece of
- * work; this component exists to make the landing page's opening
- * demonstrate the point instead of only asserting it.
+ * delegation graph -- is a separate, much larger piece of future work; this
+ * component exists to make the landing page's opening demonstrate the
+ * point instead of only asserting it.
  *
  * The Sentinel reply is its own component, keyed by session id, so each
  * cycle remounts it and its reveal timers start clean -- deliberately not

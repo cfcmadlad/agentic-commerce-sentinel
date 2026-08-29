@@ -10,7 +10,7 @@ similar causal features start at zero deterministically, so no test's
 assertions depend on what order tests happen to run in.
 
 The client fixture is session-scoped because building it fits the real
-Layer 3 model once (the same cost `run_milestone_b.py` pays) -- fine to do
+Layer 3 model once (the same cost `run_full_eval.py` pays) -- fine to do
 once for the whole test session, wasteful to repeat per test.
 """
 

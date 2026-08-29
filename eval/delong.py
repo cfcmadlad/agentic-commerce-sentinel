@@ -19,7 +19,7 @@ handles ties by construction, scoring a tied pair 0.5 -- but the resulting AUC
 collapses to balanced accuracy, `(sensitivity + specificity) / 2`, and carries
 no information about ordering within either group because there is none to
 carry. That is a real property of the comparison, not a defect in the
-estimator, and `eval/milestone_b.py` reports it as such rather than presenting
+estimator, and `eval/full_evaluation.py` reports it as such rather than presenting
 a binary-score AUC as if it were comparable to a ranked one. The paired
 McNemar test at the operating point, and the baseline plotted as a single
 point against the ensemble's precision-recall curve, are the comparisons that

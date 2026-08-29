@@ -23,9 +23,9 @@ gap matters.
 An SMT solver answers the second question directly. Given a decision
 function encoded as constraints and a property stated as a formula, Z3 either
 proves the formula holds for *every* input in the encoded space, or returns a
-concrete counterexample showing exactly where it fails. This milestone
-encodes Layers 1, 2, and 2.5's real decision logic -- not a simplified
-model of it -- and proves eight safety properties about it exhaustively.
+concrete counterexample showing exactly where it fails. This layer encodes
+Layers 1, 2, and 2.5's real decision logic -- not a simplified model of it --
+and proves eight safety properties about it exhaustively.
 
 **Deliberately, explicitly out of scope: Layer 3.** The behavioral model's
 decision boundary is learned from data, not expressible in closed-form SMT
@@ -75,8 +75,8 @@ itself:
   domains sized to match `generator/config.py`'s real catalog -- 5 merchant
   categories, 6 item categories, 6 merchants -- rather than picked
   arbitrarily). Bounded rather than left as Z3's default unbounded integer
-  sort, per this milestone's own scope constraint: an unbounded domain can
-  hit a real SMT performance cliff on some constraint shapes; every domain
+  sort: an unbounded domain can hit a real SMT performance cliff on some
+  constraint shapes; every domain
   here is bounded to a value comfortably beyond anything the real system
   would see, keeping every check both exhaustive within the bound and fast
   (the full eight-property suite checks in well under a second).
@@ -105,10 +105,11 @@ logic being verified never inspects *which* element it received.
 P1-P2 come from `detect/scope.py`; P3-P4 from `mandate/verification.py`;
 P5-P7 from `containment/engine.py` and `containment/gate.py`; P8 from
 `detect/ensemble.py` and `eval/containment_evaluation.py`'s composition,
-with Layer 3 abstracted per the Context section above. Four of these (P1,
-P3, P6, P8) map directly onto the four example properties the brief for this
-milestone named; P2, P4, P5, and P7 were added to give each of the three
-deterministic layers real coverage rather than one property apiece.
+with Layer 3 abstracted per the Context section above. P1, P3, P6, and P8
+are the single most safety-critical check for each layer and the
+combination logic on top of them; P2, P4, P5, and P7 were added to give
+each of the three deterministic layers real coverage rather than one
+property apiece.
 
 **On why several of these read as "prove the specification implies its own
 conjunct."** Properties like P5, P6, and P8 are, in a strict sense, implied
@@ -148,7 +149,7 @@ finite sets resolve it essentially instantly.
 
 ## The demonstration: a real bug, a real counterexample, a real fix
 
-Required by this milestone's own brief, and kept as permanent, re-runnable
+Kept as permanent, re-runnable
 tests (`tests/test_formal_verify.py::test_deliberately_broken_subset_check_
 yields_a_real_counterexample` and `::test_the_same_check_fixed_is_proved`)
 rather than a one-off script -- so this demonstration cannot silently bit-rot
@@ -225,7 +226,7 @@ counterexample a moment before.
 
 ## Scope boundary: what this proves, and what it does not
 
-Stated explicitly, per this milestone's own final-pass requirement:
+Stated explicitly, so the guarantee above is not overread:
 
 **Proved, exhaustively, over the bounded encoded space:** the eight
 properties above, for Layers 1, 2, and 2.5's *decision logic* as currently
@@ -244,7 +245,7 @@ cases pass," but "no case in this space fails."
   free boolean inputs. Ed25519's own correctness, and `mandate/signing.py`'s
   implementation of it, are unverified here -- they are tested, not proved,
   and formally verifying an Ed25519 implementation is a different, much
-  larger undertaking than this milestone's scope.
+  larger undertaking than this document's scope.
 - **The ancestor-chain *walk* itself.** `containment/chain.py::resolve_
   ancestor_chain`'s graph traversal (following `parent_mandate_id` pointers,
   detecting a cycle by tracking visited IDs) is not re-encoded in SMT; it is
@@ -269,9 +270,10 @@ cases pass," but "no case in this space fails."
 
 ## Consequences
 
-**Per the standing constraint this project has held since Milestone C, this
-milestone did not touch `detect/`, `features/`, `containment/`, or the
-generator.** `formal/` is a new, read-only-with-respect-to-those-modules
+**Per the standing constraint this project has held since the held-out
+evaluation (`docs/adr/0003`), this layer did not touch `detect/`,
+`features/`, `containment/`, or the generator.** `formal/` is a new,
+read-only-with-respect-to-those-modules
 package: it encodes their logic for verification purposes and changes
 nothing about how they run. The one dependency added
 (`z3-solver==5.1.0.0`, pinned in `pyproject.toml` and

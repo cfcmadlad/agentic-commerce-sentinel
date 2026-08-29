@@ -8,9 +8,9 @@ to `.env` and fill in a real key -- a working alternative to setting the
 variable in a shell profile. `.env` itself stays gitignored; only
 `.env.example` (no real key) is committed.
 
-A future Milestone E (the API service) would set `GROQ_API_KEY` through its
-own deployment's environment or secrets manager, not through this file --
-`load_dotenv()` here only affects local `pytest` runs.
+A real deployment of the API service sets `GROQ_API_KEY` through its own
+environment or secrets manager, not through this file -- `load_dotenv()`
+here only affects local `pytest` runs.
 """
 
 from __future__ import annotations

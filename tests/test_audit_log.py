@@ -1,14 +1,15 @@
-"""Tests for `reasoning.audit_log`: append-only persistence of decisions."""
+"""Tests for `reasoning.audit_log`: append-only, hash-chained persistence of decisions."""
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
-from reasoning.audit_log import AuditLog
+from reasoning.audit_log import GENESIS_HASH, AuditLog, compute_record_hash
 from reasoning.schema import AuditRecord
 
 
@@ -107,7 +108,7 @@ def test_audit_log_exposes_no_mutation_or_deletion_method() -> None:
     forbidden_names = {"delete", "remove", "clear", "truncate", "update", "pop", "overwrite"}
     public_methods = {name for name in dir(AuditLog) if not name.startswith("_")}
     assert public_methods.isdisjoint(forbidden_names)
-    assert public_methods == {"append", "read_all", "path"}
+    assert public_methods == {"append", "read_all", "read_entries", "path"}
 
 
 def test_constructing_over_an_existing_file_does_not_truncate_it(tmp_path: Path) -> None:
@@ -130,13 +131,52 @@ def test_top_features_round_trip_as_signed_floats(tmp_path: Path) -> None:
 def test_read_all_rejects_malformed_top_features(tmp_path: Path) -> None:
     """A corrupted line with a non-pair top_features entry must fail loudly, not silently drop data."""
     path = tmp_path / "audit.jsonl"
-    path.write_text(
+    malformed_record = (
         '{"record_id": "' + str(uuid4()) + '", "session_id": "' + str(uuid4()) + '", '
         '"mandate_id": null, "blocked": true, "source": "rules", "rules_fired": [], '
         '"behavioral_score": null, "top_features": [["only_one_element"]], '
-        '"narrative": "x", "narrated_by_model": "m", "created_at": "2026-08-27T00:00:00+00:00"}\n',
+        '"narrative": "x", "narrated_by_model": "m", "created_at": "2026-08-27T00:00:00+00:00"}'
+    )
+    path.write_text(
+        json.dumps({"record": json.loads(malformed_record), "prev_hash": GENESIS_HASH, "record_hash": "x"})
+        + "\n",
         encoding="utf-8",
     )
     log = AuditLog(path)
     with pytest.raises(ValueError, match=r"\[name, value\] pairs"):
         log.read_all()
+
+
+def test_first_record_chains_from_genesis_hash(tmp_path: Path) -> None:
+    """The first entry in a fresh log must chain from the documented genesis sentinel."""
+    log = AuditLog(tmp_path / "audit.jsonl")
+    record = _record()
+    log.append(record)
+    entry = log.read_entries()[0]
+    assert entry.prev_hash == GENESIS_HASH
+    assert entry.record_hash == compute_record_hash(GENESIS_HASH, record)
+
+
+def test_second_record_chains_from_the_first_records_hash(tmp_path: Path) -> None:
+    """Each entry after the first must chain from its predecessor's own record_hash."""
+    log = AuditLog(tmp_path / "audit.jsonl")
+    first = _record(session_id=uuid4())
+    second = _record(session_id=uuid4())
+    log.append(first)
+    log.append(second)
+    entries = log.read_entries()
+    assert entries[1].prev_hash == entries[0].record_hash
+    assert entries[1].record_hash == compute_record_hash(entries[0].record_hash, second)
+
+
+def test_chain_continues_correctly_across_reopened_log_instances(tmp_path: Path) -> None:
+    """A fresh `AuditLog` pointed at an existing file must chain the next append from its true head."""
+    path = tmp_path / "audit.jsonl"
+    first_instance = AuditLog(path)
+    first_instance.append(_record())
+
+    second_instance = AuditLog(path)
+    second_instance.append(_record())
+
+    entries = second_instance.read_entries()
+    assert entries[1].prev_hash == entries[0].record_hash

@@ -12,13 +12,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MilestoneBReport } from "../types/metrics";
+import type { FullEvaluationReport } from "../types/metrics";
 
 /**
  * Static metrics dashboard.
  *
  * Renders `public/metrics.json`, produced by:
- *   python run_milestone_b.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
+ *   python run_full_eval.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
  *
  * This is a static export, not a live API call -- there is no backend
  * behind this view. Every number here traces back to eval/report_json.py,
@@ -45,7 +45,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 export default function MetricsDashboard() {
-  const [report, setReport] = useState<MilestoneBReport | null>(null);
+  const [report, setReport] = useState<FullEvaluationReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function MetricsDashboard() {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return res.json();
       })
-      .then((data: MilestoneBReport) => setReport(data))
+      .then((data: FullEvaluationReport) => setReport(data))
       .catch((err: Error) => setError(err.message));
   }, []);
 
@@ -63,7 +63,7 @@ export default function MetricsDashboard() {
       <div className="error-state">
         Could not load metrics.json: {error}
         <br />
-        Generate it with: <code>python run_milestone_b.py --n-legitimate 20000 --seed 42 --json-out
+        Generate it with: <code>python run_full_eval.py --n-legitimate 20000 --seed 42 --json-out
         frontend/public/metrics.json</code>
       </div>
     );

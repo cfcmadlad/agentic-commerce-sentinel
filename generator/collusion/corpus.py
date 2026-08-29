@@ -3,7 +3,7 @@
 Chronologically ordered, matching every other evaluation corpus in this
 project. Reuses `generator.legitimate.generate_legitimate_sessions` for the
 ordinary independent-agent population rather than reinventing it -- this is
-the same legitimate traffic every other milestone's numbers are measured
+the same legitimate traffic every other evaluation in this project measures
 against, just with a synthetic device fingerprint attached to each session
 (see `generator/collusion/__init__.py` for why that is a session-keyed
 mapping rather than a schema change).

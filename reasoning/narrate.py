@@ -46,8 +46,9 @@ reported verdict match its input, does injected content in a free-text
 field fail to change any of that -- never on exact string equality against
 a golden narrative.
 
-Reuse for Milestone H. `narrate` and `build_narration_input` take one
-session's worth of already-computed output and return one narration; there
+Reusable for narrating held-out or exception sessions, not only live ones.
+`narrate` and `build_narration_input` take one session's worth of
+already-computed output and return one narration; there
 is nothing here that assumes a demo, a fixed corpus, or a particular
 attack class. Calling this in a loop over `eval.held_out_evaluation`'s
 missed sessions -- to narrate honestly that no layer currently checks a

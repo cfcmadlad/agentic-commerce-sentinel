@@ -13,7 +13,7 @@ Run locally:
 
 The first request after startup (or the startup itself, depending on
 `--reload` behavior) pays the cost of fitting Layer 3 against the same
-20,000-session corpus `run_milestone_b.py` reports on -- see
+20,000-session corpus `run_full_eval.py` reports on -- see
 `service/state.py` for why that tradeoff is deliberate.
 """
 

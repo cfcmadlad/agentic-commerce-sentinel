@@ -7,12 +7,13 @@
  *   - AttributionRow      <- detect/attribution.py (explain_row)
  *   - ReasoningNarrative  <- reasoning/schema.py::Narration
  *
- * The API service (Milestone E) is built under /service, but this frontend
- * does not call it yet -- every value rendered by the live demo view still
- * comes from `mock/sessions.ts`, not a `fetch(...)`. The fixtures were produced by
- * actually running `reasoning.narrate.narrate()` against the real Groq API
- * for each mock session's real Baseline/Ensemble/Attribution data (see the
- * comment in `mock/sessions.ts`), not written by hand, so the narrative
+ * The API service is built under /service. The live demo view POSTs real,
+ * pre-signed requests to it when `VITE_API_BASE_URL` is configured, and
+ * falls back to `mock/sessions.ts` otherwise (the case for the hosted
+ * static build, which has no backend to call). The fixtures were produced
+ * by actually running `reasoning.narrate.narrate()` against the real Groq
+ * API for each mock session's real Baseline/Ensemble/Attribution data (see
+ * the comment in `mock/sessions.ts`), not written by hand, so the narrative
  * text is genuine model output, not placeholder prose.
  */
 

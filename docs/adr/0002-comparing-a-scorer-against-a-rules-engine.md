@@ -14,10 +14,10 @@ than a choice made silently inside a formatting function.
 are all defined over an ordering of the scored population. `RulesOnlyBaseline`
 emits a hard block/allow verdict; there is no ordering within the blocked group
 or within the allowed group, because a rules engine has exactly one operating
-point by construction. Before this milestone, `eval/milestone_a.py` sidestepped
-the issue entirely: it computed no AUC at all and compared the two systems only
-as hard classifiers, so no convention for scoring the baseline existed to
-inherit.
+point by construction. `eval/ensemble_evaluation.py` sidesteps the issue
+entirely: it computes no AUC at all and compares the two systems only as
+hard classifiers, so no convention for scoring the baseline as a ranking
+existed to inherit here.
 
 **The baseline's precision is 1.0, and is 1.0 by construction.** The legitimate
 generator places every legitimate session inside its own mandate's scope, so no
@@ -84,6 +84,6 @@ same sessions. DeLong is reported as a secondary, low-resolution check.
 - The DeLong number is weaker evidence than the McNemar number here, and the
   report says so in the output rather than only in this document.
 - None of this changes what would be reported if Layer 3 genuinely failed. The
-  gate's failure paths are exercised directly in `tests/test_milestone_b.py`,
+  gate's failure paths are exercised directly in `tests/test_full_evaluation.py`,
   including the case where Layer 3 adds recall but not significantly, and the
   case where it adds none at all.

@@ -1,4 +1,4 @@
-"""The eight safety properties this milestone proves, each a named function.
+"""The eight safety properties this module proves, each a named function.
 
 Every property is stated as an implication -- a premise about the encoded
 inputs, and a conclusion that must hold whenever the premise does, for every
@@ -220,7 +220,7 @@ def _p8_no_session_both_allowed_and_flagged_for_hold() -> Property:
 
 
 def all_properties() -> tuple[Property, ...]:
-    """Builds every safety property this milestone proves.
+    """Builds every safety property this module proves.
 
     Returns:
         All eight properties, in the fixed order they are reported.

@@ -11,8 +11,8 @@ Two, and only two, ways an edge can form between two distinct agents:
   same-merchant sessions, every consecutive pair inside
   `coordination_window`, containing at least `min_burst_agents` distinct
   agents. A *pairwise* "these two sessions happen to be close in time" test
-  was tried first and rejected during this milestone's own calibration: at
-  realistic traffic volume against a small, shared merchant catalog, two
+  was tried first and rejected during calibration: at realistic traffic
+  volume against a small, shared merchant catalog, two
   independent agents landing within any fixed window of each other by pure
   chance turns out to be common, not rare (measured directly, not assumed --
   see `docs/adr/0006`). Requiring a genuine multi-agent burst, not a
@@ -128,8 +128,8 @@ def _counterparty_edges(
     enough at realistic traffic volume: with a small agent pool transacting
     repeatedly at a handful of popular merchants, two *independent* agents
     landing within any fixed window of each other by pure chance turns out
-    to be common, not rare (confirmed empirically while calibrating this
-    milestone -- see `docs/adr/0006`). The criterion here is a genuine
+    to be common, not rare (confirmed empirically during calibration -- see
+    `docs/adr/0006`). The criterion here is a genuine
     multi-agent burst instead: sessions at one merchant are grouped into
     maximal chronological clusters where every consecutive gap is within
     `coordination_window`, and a cluster only counts as coordinated if at

@@ -3,11 +3,12 @@
 A detection layer operating across sessions and agents, not within one
 session -- structurally distinct from Layer 3 (`detect/behavioral.py`),
 which only ever looks at one agent's own history. Nothing here reasons
-about a mandate's delegation chain either, so this is not a patch to
-Milestone C's disclosed single-session gap or Milestone G's single-chain
-gap: it targets a third, different failure mode -- several ostensibly
-independent agent identities acting in coordination -- and makes no claim
-of having addressed either of the other two. See
+about a mandate's delegation chain either, so this is not a patch to the
+disclosed held-out mandate-chaining gap (`docs/adr/0003`) or to delegation-
+chain containment's own remaining single-chain gap (`docs/adr/0004`): it
+targets a third, different failure mode -- several ostensibly independent
+agent identities acting in coordination -- and makes no claim of having
+addressed either of the other two. See
 `docs/adr/0006-collusion-ring-detection.md`.
 
 Pipeline: `collusion/graph.py` builds an agent graph from shared device

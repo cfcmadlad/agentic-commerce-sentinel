@@ -15,7 +15,7 @@ import {
 import type { FullEvaluationReport } from "../types/metrics";
 
 /**
- * Static metrics dashboard.
+ * Full evaluation report.
  *
  * Renders `public/metrics.json`, produced by:
  *   python run_full_eval.py --n-legitimate 20000 --seed 42 --json-out frontend/public/metrics.json
@@ -44,7 +44,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-export default function MetricsDashboard() {
+export default function Evaluation() {
   const [report, setReport] = useState<FullEvaluationReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,12 +94,12 @@ export default function MetricsDashboard() {
           </p>
         </div>
         <h2 className="section-title">Hard gate: does Layer 3 earn its place?</h2>
-        <p style={{ margin: "2px 0 10px" }}>
+        <p style={{ margin: "2px 0 8px" }}>
           <span className={`badge ${gate.layer3_earns_its_place ? "badge--allow" : "badge--block"}`}>
             {gate.layer3_earns_its_place ? "yes" : "no — drop Layer 3"}
           </span>
         </p>
-        <p className="section-note">{gate.rationale}</p>
+        <p className="section-note" style={{ marginBottom: 0 }}>{gate.rationale}</p>
       </div>
 
       <div className="grid-cards">
@@ -134,118 +134,126 @@ export default function MetricsDashboard() {
         <StatCard label="Corpus size" value={report.n_sessions.toLocaleString()} sub={`base rate ${fmtPct(report.attack_base_rate)}`} />
       </div>
 
-      <div className="panel">
-        <h2 className="section-title">Per-variant recall: rules-only → ensemble</h2>
-        <p className="section-note">Rules-invisible variants are the two Layer 3 exists to catch.</p>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Variant</th>
-              <th>n</th>
-              <th>Rules-only</th>
-              <th>Ensemble</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.variant_comparison.map((v) => (
-              <tr key={v.variant}>
-                <td>
-                  {v.variant}
-                  {v.is_rules_invisible && (
-                    <span className="badge badge--warn" style={{ marginLeft: 6 }}>
-                      rules-invisible
-                    </span>
-                  )}
-                </td>
-                <td>{v.total}</td>
-                <td>{fmtPct(v.rules_recall)}</td>
-                <td>{fmtPct(v.ensemble_recall)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="panel">
-        <h2 className="section-title">
-          Cost sweep (cost ratio {report.cost_ratio.toFixed(1)}:1)
-        </h2>
-        <p className="section-note">
-          Blocked-legitimate and missed-attack rates per 10,000 sessions, across the full threshold
-          range. Minimum-cost point at threshold {fmtNum(chosenSweep.minimum_cost_point.threshold)}.
-        </p>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={costChartData}>
-            <CartesianGrid stroke="#ececec" />
-            <XAxis dataKey="threshold" stroke="#777b86" fontSize={11} />
-            <YAxis stroke="#777b86" fontSize={11} />
-            <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line
-              type="monotone"
-              dataKey="blocked_legit_per_10k"
-              name="blocked legit / 10k"
-              stroke="#777b86"
-              strokeDasharray="4 3"
-              dot={false}
-            />
-            <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#17191c" dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {report.sensitivity ? (
+      <div className="panel-row">
         <div className="panel">
-          <h2 className="section-title">Sensitivity to generator parameters</h2>
-          <p className="section-note">
-            AUC-PR range across the grid: {fmtNum(report.sensitivity.auc_pr_range.low)}–
-            {fmtNum(report.sensitivity.auc_pr_range.high)}. Worst case:{" "}
-            {report.sensitivity.worst_case_name}. Ensemble beats baseline at every point:{" "}
-            {report.sensitivity.holds_everywhere ? "yes" : "no"}.
-          </p>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart
-              data={[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes]}
-              layout="vertical"
-              margin={{ left: 100 }}
-            >
-              <CartesianGrid stroke="#ececec" />
-              <XAxis type="number" domain={[0, 1]} stroke="#777b86" fontSize={11} />
-              <YAxis type="category" dataKey="name" stroke="#777b86" fontSize={10} width={140} />
-              <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
-              <Bar dataKey="ensemble_auc_pr" name="ensemble AUC-PR">
-                {[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes].map((o) => (
-                  <Cell key={o.name} fill={o.beats_baseline ? "#d8d9db" : "#17191c"} />
+          <h2 className="section-title">Per-variant recall: rules-only → ensemble</h2>
+          <p className="section-note">Rules-invisible variants are the two Layer 3 exists to catch.</p>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Variant</th>
+                  <th>n</th>
+                  <th>Rules-only</th>
+                  <th>Ensemble</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.variant_comparison.map((v) => (
+                  <tr key={v.variant}>
+                    <td>
+                      {v.variant}
+                      {v.is_rules_invisible && (
+                        <span className="badge badge--warn" style={{ marginLeft: 6 }}>
+                          rules-invisible
+                        </span>
+                      )}
+                    </td>
+                    <td className="mono">{v.total}</td>
+                    <td className="mono">{fmtPct(v.rules_recall)}</td>
+                    <td className="mono">{fmtPct(v.ensemble_recall)}</td>
+                  </tr>
                 ))}
-              </Bar>
-            </BarChart>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2 className="section-title">
+            Cost sweep (cost ratio {report.cost_ratio.toFixed(1)}:1)
+          </h2>
+          <p className="section-note">
+            Blocked-legitimate and missed-attack rates per 10,000 sessions. Minimum-cost point at
+            threshold {fmtNum(chosenSweep.minimum_cost_point.threshold)}.
+          </p>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={costChartData}>
+              <CartesianGrid stroke="#ececec" />
+              <XAxis dataKey="threshold" stroke="#777b86" fontSize={11} />
+              <YAxis stroke="#777b86" fontSize={11} />
+              <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="blocked_legit_per_10k"
+                name="blocked legit / 10k"
+                stroke="#777b86"
+                strokeDasharray="4 3"
+                dot={false}
+              />
+              <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#17191c" dot={false} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
-      ) : (
-        <div className="panel">
-          <h2 className="section-title">Sensitivity to generator parameters</h2>
-          <p className="section-note">Not run in this export.</p>
-        </div>
-      )}
+      </div>
 
-      <div className="panel">
-        <h2 className="section-title">Top SHAP features (mean |contribution|)</h2>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Feature</th>
-              <th>Mean |SHAP|</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.top_attribution_features.map((f) => (
-              <tr key={f.feature}>
-                <td>{f.feature}</td>
-                <td>{fmtNum(f.mean_abs_shap)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="panel-row">
+        {report.sensitivity ? (
+          <div className="panel">
+            <h2 className="section-title">Sensitivity to generator parameters</h2>
+            <p className="section-note">
+              AUC-PR range: {fmtNum(report.sensitivity.auc_pr_range.low)}–
+              {fmtNum(report.sensitivity.auc_pr_range.high)}. Worst case:{" "}
+              {report.sensitivity.worst_case_name}. Beats baseline everywhere:{" "}
+              {report.sensitivity.holds_everywhere ? "yes" : "no"}.
+            </p>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart
+                data={[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes]}
+                layout="vertical"
+                margin={{ left: 100 }}
+              >
+                <CartesianGrid stroke="#ececec" />
+                <XAxis type="number" domain={[0, 1]} stroke="#777b86" fontSize={11} />
+                <YAxis type="category" dataKey="name" stroke="#777b86" fontSize={10} width={140} />
+                <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
+                <Bar dataKey="ensemble_auc_pr" name="ensemble AUC-PR">
+                  {[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes].map((o) => (
+                    <Cell key={o.name} fill={o.beats_baseline ? "#d8d9db" : "#17191c"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="panel">
+            <h2 className="section-title">Sensitivity to generator parameters</h2>
+            <p className="section-note" style={{ marginBottom: 0 }}>Not run in this export.</p>
+          </div>
+        )}
+
+        <div className="panel">
+          <h2 className="section-title">Top SHAP features (mean |contribution|)</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>Mean |SHAP|</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.top_attribution_features.map((f) => (
+                  <tr key={f.feature}>
+                    <td>{f.feature}</td>
+                    <td className="mono">{fmtNum(f.mean_abs_shap)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </>
   );

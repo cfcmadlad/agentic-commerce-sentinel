@@ -1,19 +1,25 @@
 /**
  * Shared geometry and types for rendering the real per-session collision data
  * (`public/collision.json`, from `run_collision_export.py`) as a log-scale
- * scatter with a draggable threshold. Used by the full `/collide` page and
- * by the compact landing-page widget, so both read the exact same real data
- * through the exact same math rather than two copies that could drift.
+ * scatter or a kernel-density terrain, both with a draggable/shared
+ * threshold. Used by every view under `/explorer` plus the compact Overview
+ * widget, so all of them read the exact same real data through the exact
+ * same math rather than copies that could drift.
  */
 
 export interface CollisionPoint {
   score: number;
   category: string;
   blocked_by_rules: boolean;
+  feature_x: number;
+  feature_y: number;
+  agent_id: string;
 }
 
 export interface CollisionData {
   threshold: number;
+  feature_x_name: string;
+  feature_y_name: string;
   points: CollisionPoint[];
 }
 
@@ -56,4 +62,23 @@ export async function loadCollisionData(): Promise<CollisionData> {
   const res = await fetch("/collision.json");
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return (await res.json()) as CollisionData;
+}
+
+export interface CategoryStat {
+  total: number;
+  blocked: number;
+}
+
+/** Per-category totals and would-be-blocked counts at a given score threshold. */
+export function computeCategoryStats(
+  points: CollisionPoint[],
+  threshold: number,
+): Record<string, CategoryStat> {
+  const byCategory: Record<string, CategoryStat> = {};
+  for (const p of points) {
+    byCategory[p.category] ??= { total: 0, blocked: 0 };
+    byCategory[p.category].total += 1;
+    if (p.score >= threshold) byCategory[p.category].blocked += 1;
+  }
+  return byCategory;
 }

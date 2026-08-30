@@ -277,18 +277,29 @@ export default function Sandbox() {
             combination above that gets a violating transaction marked "allowed" — that's not a
             game restriction, it's the rule engine having no tolerance band to find.
           </p>
-          <div className="attempt-log">
-            {log.map((a) => (
-              <div className="attempt-row" key={a.id}>
-                <span className={`badge ${a.blocked ? "badge--block" : "badge--allow"}`}>
-                  {a.blocked ? "blocked" : "allowed"}
-                </span>
-                <span className="attempt-row__amount">₹{a.amount.toLocaleString()}</span>
-                <span className="attempt-row__reasons">
-                  {a.reasons.length > 0 ? a.reasons.map((r) => VIOLATION_LABELS[r]).join(", ") : "within scope"}
-                </span>
-              </div>
-            ))}
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Verdict</th>
+                  <th>Amount</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {log.map((a) => (
+                  <tr key={a.id}>
+                    <td>
+                      <span className={`badge ${a.blocked ? "badge--block" : "badge--allow"}`}>
+                        {a.blocked ? "blocked" : "allowed"}
+                      </span>
+                    </td>
+                    <td className="mono">₹{a.amount.toLocaleString()}</td>
+                    <td>{a.reasons.length > 0 ? a.reasons.map((r) => VIOLATION_LABELS[r]).join(", ") : "within scope"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@ import { MOCK_SESSIONS, MOCK_SESSION_LABELS } from "../mock/sessions";
 import type { SessionDecisionResponse } from "../types/contract";
 
 /**
- * Live pipeline demo view.
+ * Live pipeline decision view.
  *
  * Without `VITE_API_BASE_URL` configured (the case for the hosted static
  * build), reads from the mock fixture module exactly as before. When that
@@ -153,21 +153,21 @@ function AttributionView({ session }: { session: SessionDecisionResponse }) {
     <div>
       {session.attribution.map((row) => (
         <div className="attribution-row" key={row.feature}>
-          <span style={{ width: 220, flexShrink: 0, color: "var(--slate)" }}>{row.feature}</span>
+          <span className="mono" style={{ width: 220, flexShrink: 0, color: "var(--slate)" }}>{row.feature}</span>
           <span className="attribution-bar-track">
             <span
               className={`attribution-bar ${row.shap_value >= 0 ? "attribution-bar--positive" : "attribution-bar--negative"}`}
               style={{ width: `${(Math.abs(row.shap_value) / maxAbs) * 100}%` }}
             />
           </span>
-          <span style={{ width: 60, textAlign: "right" }}>{row.shap_value.toFixed(3)}</span>
+          <span className="mono" style={{ width: 60, textAlign: "right" }}>{row.shap_value.toFixed(3)}</span>
         </div>
       ))}
     </div>
   );
 }
 
-export default function LiveDemo() {
+export default function Decisions() {
   const [selectedId, setSelectedId] = useState(MOCK_SESSIONS[0].session_id);
   const live = useLiveDemoSessions();
 
@@ -191,15 +191,17 @@ export default function LiveDemo() {
         <div className="page-intro">
           <span className="page-intro__eyebrow">New here?</span>
           <p>
-            Each button below is a full synthetic transaction — a signed authorization ("mandate")
-            plus a purchase attempt. Click one to watch all four checks run against it in order and
-            see the real verdict: which check fired (if any), what evidence it points to, and a
+            Each row is a full synthetic transaction — a signed authorization ("mandate") plus a
+            purchase attempt. Pick one to watch all four checks run against it in order and see the
+            real verdict: which check fired (if any), what evidence it points to, and a
             plain-language explanation of why.
           </p>
         </div>
-        <h2 className="section-title">Pick a session</h2>
-        <p className="section-note">{sourceNote}</p>
-        <div className="session-picker">
+        <p className="section-note" style={{ marginBottom: 0 }}>{sourceNote}</p>
+      </div>
+
+      <div className="decisions-layout">
+        <div className="session-rail">
           {MOCK_SESSIONS.map((s) => (
             <button
               key={s.session_id}
@@ -210,29 +212,31 @@ export default function LiveDemo() {
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="panel">
-        <h2 className="section-title">Decision pipeline</h2>
-        <PipelineView session={session} />
-      </div>
+        <div className="decisions-layout__detail">
+          <div className="panel">
+            <h2 className="section-title">Decision pipeline</h2>
+            <PipelineView session={session} />
+          </div>
 
-      <div className="panel">
-        <h2 className="section-title">Feature attribution</h2>
-        <p className="section-note">
-          Signed SHAP contribution per feature — positive pushes the score toward "attack",
-          negative toward "legitimate".
-        </p>
-        <AttributionView session={session} />
-      </div>
+          <div className="panel">
+            <h2 className="section-title">Feature attribution</h2>
+            <p className="section-note">
+              Signed SHAP contribution per feature — positive pushes the score toward "attack",
+              negative toward "legitimate".
+            </p>
+            <AttributionView session={session} />
+          </div>
 
-      <div className="panel">
-        <h2 className="section-title">Decision narrative</h2>
-        <p className="section-note">
-          Plain-language explanation of the verdict above, citing exactly which check fired and
-          why — narration only, produced after the verdict and structurally unable to change it.
-        </p>
-        <NarrativeView session={session} />
+          <div className="panel">
+            <h2 className="section-title">Decision narrative</h2>
+            <p className="section-note">
+              Plain-language explanation of the verdict above, citing exactly which check fired and
+              why — narration only, produced after the verdict and structurally unable to change it.
+            </p>
+            <NarrativeView session={session} />
+          </div>
+        </div>
       </div>
     </>
   );

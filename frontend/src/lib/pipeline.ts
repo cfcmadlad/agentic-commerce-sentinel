@@ -3,7 +3,7 @@ import type { SessionDecisionResponse } from "../types/contract";
 /**
  * Shared pipeline-stage computation for both the full live-demo view and
  * the compact hero replay, so the two can never silently disagree about
- * which layer fired on a given session. Extracted from LiveDemo.tsx's
+ * which layer fired on a given session. Extracted from the decisions view's
  * original inline logic without changing any of its conditions.
  */
 

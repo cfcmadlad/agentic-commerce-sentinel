@@ -507,11 +507,13 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 demo_scenarios.py   five fixed live-demo request bodies, real
                                     signed mandates, deterministic across processes
                 demo_seed.py        replays warm-up history through decide() at startup
-/frontend     web frontend — metrics dashboard (static export), live demo
-              view (wired to a live, configured API service, falls back to
-              fixtures otherwise), a sandbox running a real client-side port
-              of Layer 2's rules, and two real-data explorations of the
-              model's own scores and features
+/frontend     single-page ops dashboard (sidebar nav, no router) — a live
+              company/organization/agent/session drill-down, a live-demo
+              decisions view (wired to a live, configured API service, falls
+              back to fixtures otherwise), a sandbox running a real
+              client-side port of Layer 2's rules, a real-data score
+              explorer (scatter + risk-terrain views), and a static
+              evaluation report export
 /docs/adr     architecture decision records
 tests/        567 tests, covering every layer above
 run_gate.py             command-line entry point for the rules-baseline evaluation

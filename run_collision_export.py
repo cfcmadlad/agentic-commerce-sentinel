@@ -5,10 +5,13 @@ held-out mandate-chaining corpus against that already-frozen fit (never
 retraining or recalibrating, per `docs/adr/0003-held-out-class-evaluation.md`),
 and writes one JSON record per exported session: its real ensemble score,
 its ground-truth category, whether the rules already blocked it before
-Layer 3 was ever consulted, and its real value on the model's own two
+Layer 3 was ever consulted, its real value on the model's own two
 highest-ranked SHAP features (`TERRAIN_FEATURE_X`/`_Y`) for the frontend's
-2D risk-terrain view. No mandate or transaction content is exported --
-only the values the charts actually render.
+2D risk-terrain view, and the real agent ID that ran it (already present on
+every `SessionTrace` -- exported so the frontend can group real sessions by
+the real agent that produced them, for its per-agent drill-down view). No
+mandate or transaction content is exported -- only the values the frontend
+actually renders.
 
 Sampling exists purely to keep the exported file and the rendered point
 count reasonable; every exported point is a real session's real score, none
@@ -73,6 +76,7 @@ class CollisionPoint:
             Layer 3 was consulted at all.
         feature_x: This session's real `TERRAIN_FEATURE_X` value.
         feature_y: This session's real `TERRAIN_FEATURE_Y` value.
+        agent_id: The real agent that ran this session (`SessionTrace.agent_id`).
     """
 
     score: float
@@ -80,6 +84,7 @@ class CollisionPoint:
     blocked_by_rules: bool
     feature_x: float
     feature_y: float
+    agent_id: str
 
 
 def _sample_indices(rng: np.random.Generator, n: int, k: int) -> np.ndarray:
@@ -128,6 +133,7 @@ def _in_distribution_points(fit: PipelineFit, rng: np.random.Generator) -> list[
                 blocked_by_rules=bool(baseline_score[local_i] >= 1.0),
                 feature_x=float(fit.features[corpus_i, _X_INDEX]),
                 feature_y=float(fit.features[corpus_i, _Y_INDEX]),
+                agent_id=session.trace.agent_id,
             )
         )
     return points
@@ -176,6 +182,7 @@ def _held_out_points(
                 blocked_by_rules=decision.blocked,
                 feature_x=float(features[i, _X_INDEX]),
                 feature_y=float(features[i, _Y_INDEX]),
+                agent_id=sessions[i].trace.agent_id,
             )
         )
     return points
@@ -252,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                 "blocked_by_rules": p.blocked_by_rules,
                 "feature_x": p.feature_x,
                 "feature_y": p.feature_y,
+                "agent_id": p.agent_id,
             }
             for p in points
         ],

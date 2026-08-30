@@ -1,13 +1,22 @@
 """Mandate schema: the signed authorization an agent presents before payment.
 
-Modeled on AP2's Intent Mandate (google-agentic-commerce/AP2, v0.2.0), which
-is a public, versioned specification, rather than on NPCI's Unified Agent
-Protocol, which as of this writing has no published technical schema and is
-still pending RBI approval. Where the two diverge, this schema follows what
-has been publicly reported about UAP's approach: per-merchant spending
-limits and consent-based delegation built on UPI Circle. See README for the
-sourcing on this choice; it is a defensible substitute, not a claim that this
-IS the UAP schema.
+Takes AP2 (google-agentic-commerce/AP2), a public, citable specification,
+as its reference point rather than NPCI's Unified Agent Protocol, which as
+of this writing has no published technical schema and is still pending RBI
+approval. Not a direct implementation of AP2's own `IntentMandate`, though
+-- `interop/adapter.py`'s field-by-field mapping (see `docs/adr/
+0010-ap2-interop-adapter.md`) found that AP2's real Intent Mandate carries
+no spending-limit or category field at all (the price commitment lives in
+a separate, merchant-signed Cart Mandate), targets specific merchant/item
+IDs rather than categories, is single-transaction by construction, and has
+no delegation-chain concept -- none of which this project's own scope
+model needs to match, since it was designed independently for a reusable,
+category-scoped, multi-agent-delegation authorization AP2 does not
+represent. Where UAP's reported design is known -- per-merchant spending
+limits, consent-based delegation built on UPI Circle -- this schema
+follows that direction anyway. See README §8 and the interop ADR for the
+full sourcing; this is a defensible design point, not a claim of
+conformance to either spec.
 
 A `Mandate` is the unsigned content. A `SignedMandate` wraps it with the
 Ed25519 signature and the key identifier that produced it. Verification

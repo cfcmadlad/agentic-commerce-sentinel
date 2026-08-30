@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from reasoning.audit_log import GENESIS_HASH, AuditLog, compute_record_hash
-from reasoning.schema import AuditRecord
+from reasoning.schema import AuditRecord, Counterfactual, CounterfactualEdit
 
 
 def _record(**overrides: object) -> AuditRecord:
@@ -31,6 +31,7 @@ def _record(**overrides: object) -> AuditRecord:
         "rules_fired": ("layer1:expired",),
         "behavioral_score": None,
         "top_features": (("agent_prior_session_count", 0.9), ("hour_of_day", -0.1)),
+        "counterfactual": None,
         "narrative": "Blocked because the mandate had expired.",
         "narrated_by_model": "openai/gpt-oss-120b",
         "created_at": datetime(2026, 8, 27, 12, 0, 0, tzinfo=UTC),
@@ -63,6 +64,34 @@ def test_no_mandate_id_round_trips_as_none(tmp_path: Path) -> None:
     record = _record(mandate_id=None)
     log.append(record)
     assert log.read_all()[0].mandate_id is None
+
+
+def test_record_with_counterfactual_round_trips(tmp_path: Path) -> None:
+    """A record carrying a real counterfactual must read back with every edit intact."""
+    log = AuditLog(tmp_path / "audit.jsonl")
+    counterfactual = Counterfactual(
+        layer="layer2_scope",
+        feasible=True,
+        edits=(CounterfactualEdit("trace.amount", "8000.00", "2000.00"),),
+        explanation="This verdict flips to ALLOW if the amount were at most 2000.00 INR.",
+    )
+    record = _record(counterfactual=counterfactual)
+    log.append(record)
+    assert log.read_all() == (record,)
+
+
+def test_absent_counterfactual_is_omitted_from_the_stored_line(tmp_path: Path) -> None:
+    """A None counterfactual must not appear as an explicit null on disk.
+
+    This is the property that keeps a hash computed before this field
+    existed reproducible after it was added -- see
+    `reasoning.audit_log._record_to_json_dict`'s own docstring for why.
+    """
+    log = AuditLog(tmp_path / "audit.jsonl")
+    log.append(_record(counterfactual=None))
+    line = log.path.read_text(encoding="utf-8").strip()
+    stored_record = json.loads(line)["record"]
+    assert "counterfactual" not in stored_record
 
 
 def test_reopening_the_log_sees_records_from_a_prior_instance(tmp_path: Path) -> None:

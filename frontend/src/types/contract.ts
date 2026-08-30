@@ -19,6 +19,7 @@
 
 export type VerificationFailureReason =
   | "unknown_signer"
+  | "key_revoked"
   | "invalid_signature"
   | "not_yet_valid"
   | "expired"
@@ -78,6 +79,28 @@ export interface ReasoningNarrative {
   generated_at: string;
 }
 
+/** One field a counterfactual explanation changes. Mirrors reasoning/schema.py::CounterfactualEdit. */
+export interface CounterfactualEdit {
+  field: string;
+  real_value: string;
+  suggested_value: string;
+}
+
+/**
+ * A minimal-edit explanation of what would flip a blocked verdict.
+ * Mirrors reasoning/schema.py::Counterfactual. `layer` is one of
+ * "layer1_verification", "layer2_scope", or "layer3_behavioral" for
+ * anything the live service can produce (layer2_5_containment exists in
+ * counterfactual/deterministic.py but is not wired into /sessions/decide,
+ * see docs/adr/0008).
+ */
+export interface Counterfactual {
+  layer: string;
+  feasible: boolean;
+  edits: CounterfactualEdit[];
+  explanation: string;
+}
+
 /** The full per-session decision record a live demo view renders. */
 export interface SessionDecisionResponse {
   session_id: string;
@@ -86,4 +109,39 @@ export interface SessionDecisionResponse {
   attribution: AttributionRow[] | null;
   /** Null only for a session that was never narrated. Every fixture below has one. */
   narrative: ReasoningNarrative | null;
+  /** Null for an allowed session (nothing to explain). */
+  counterfactual: Counterfactual | null;
+}
+
+/** One mandate along a delegation chain. Mirrors service/schemas.py::ChainNodeOut. */
+export interface ChainNode {
+  mandate_id: string;
+  agent_id: string;
+  parent_mandate_id: string | null;
+  depth: number;
+  is_root: boolean;
+  /** Null for a root, or a node whose own parent could not be resolved. */
+  in_bounds: boolean | null;
+  reasons: string[];
+  unresolvable_parent: boolean;
+}
+
+/** One parent-child link along a delegation chain. Mirrors service/schemas.py::ChainEdgeOut. */
+export interface ChainEdge {
+  child_mandate_id: string;
+  parent_mandate_id: string;
+  violates: boolean;
+}
+
+/**
+ * A mandate's full delegation chain, each node's own Layer 2.5 containment
+ * verdict included. Mirrors service/schemas.py::DelegationChainOut. This is
+ * a live, on-demand read -- Layer 2.5 is not part of the automatic
+ * `/sessions/decide` verdict itself, see docs/adr/0011.
+ */
+export interface DelegationChain {
+  nodes: ChainNode[];
+  edges: ChainEdge[];
+  chain_broken: boolean;
+  chain_broken_reason: string | null;
 }

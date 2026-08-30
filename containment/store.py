@@ -63,6 +63,66 @@ class InMemoryMandateChainStore:
         return found
 
 
+class MutableMandateChainStore:
+    """A chain store that accumulates mandates incrementally, for a live service.
+
+    `InMemoryMandateChainStore` above is built once from a whole known
+    collection (an offline corpus's every presented mandate). A live
+    service instead learns about one mandate at a time, as sessions
+    arrive, and needs to keep accumulating for its whole process lifetime
+    -- the same "single shared instance, mutated as requests come in"
+    shape `mandate.verification.MandateLedger` and
+    `features.session.FeatureExtractor` already have. `add` applies the
+    exact same fail-closed-on-conflict discipline
+    `build_store_from_signed_mandates` uses for its one-shot bulk index,
+    rather than a second, more permissive rule for the incremental case.
+    """
+
+    def __init__(self) -> None:
+        """Initializes an empty store."""
+        self._mandates: dict[UUID, Mandate] = {}
+        self._conflicting: set[UUID] = set()
+
+    def add(self, mandate: Mandate) -> None:
+        """Records one mandate, or excludes its ID if it conflicts with what's already known.
+
+        Args:
+            mandate: The mandate to record.
+        """
+        if mandate.mandate_id in self._conflicting:
+            return
+        existing = self._mandates.get(mandate.mandate_id)
+        if existing is not None and existing != mandate:
+            self._conflicting.add(mandate.mandate_id)
+            self._mandates.pop(mandate.mandate_id, None)
+            logger.error(
+                "mandate %s resolves to conflicting content; excluding it from the live chain "
+                "store rather than picking one arbitrarily",
+                mandate.mandate_id,
+            )
+            return
+        self._mandates[mandate.mandate_id] = mandate
+
+    def get(self, mandate_id: UUID) -> Mandate | None:
+        """Returns the mandate with this ID, or None.
+
+        Args:
+            mandate_id: The mandate ID to resolve.
+
+        Returns:
+            The mandate, or None if unknown or excluded for conflicting content.
+        """
+        return self._mandates.get(mandate_id)
+
+    def all_mandates(self) -> tuple[Mandate, ...]:
+        """Returns every mandate currently recorded, in no particular order.
+
+        Returns:
+            All non-conflicting mandates this store has recorded so far.
+        """
+        return tuple(self._mandates.values())
+
+
 def build_store_from_signed_mandates(
     signed_mandates: Iterable[SignedMandate],
 ) -> InMemoryMandateChainStore:

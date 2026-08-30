@@ -13,7 +13,7 @@ from reasoning.audit_chain import (
     verify_chain,
 )
 from reasoning.audit_log import AuditLog
-from reasoning.schema import AuditRecord
+from reasoning.schema import AuditRecord, Counterfactual, CounterfactualEdit
 
 
 def _record(**overrides: object) -> AuditRecord:
@@ -34,6 +34,7 @@ def _record(**overrides: object) -> AuditRecord:
         "rules_fired": ("layer1:expired",),
         "behavioral_score": None,
         "top_features": (("agent_prior_session_count", 0.9), ("hour_of_day", -0.1)),
+        "counterfactual": None,
         "narrative": "Blocked because the mandate had expired.",
         "narrated_by_model": "openai/gpt-oss-120b",
         "created_at": datetime(2026, 8, 27, 12, 0, 0, tzinfo=UTC),
@@ -53,6 +54,35 @@ def test_an_untouched_log_verifies_intact(tmp_path: Path) -> None:
     assert result.first_break_index is None
     assert result.broken_field is None
     assert result.total_records == 5
+
+
+def test_chain_stays_intact_across_entries_written_with_and_without_a_counterfactual(tmp_path: Path) -> None:
+    """A log mixing pre-existing (no counterfactual) and new entries must still verify intact.
+
+    This is the realistic shape of an existing deployment's log after this
+    field was added: old entries hashed under the prior schema, new ones
+    appended afterward. `_record_to_json_dict` omitting a None
+    counterfactual (see its own docstring) is exactly what keeps this
+    intact rather than every pre-existing entry reporting as tampered.
+    """
+    log = AuditLog(tmp_path / "audit.jsonl")
+    log.append(_record(session_id=uuid4(), counterfactual=None))
+    log.append(
+        _record(
+            session_id=uuid4(),
+            counterfactual=Counterfactual(
+                layer="layer1_verification",
+                feasible=True,
+                edits=(CounterfactualEdit("scope.max_transaction_count", "1", "2"),),
+                explanation="This verdict flips to ALLOW if the mandate authorized at least 2 transactions.",
+            ),
+        )
+    )
+    log.append(_record(session_id=uuid4(), counterfactual=None))
+
+    result = verify_chain(log.read_entries())
+    assert result.intact
+    assert result.total_records == 3
 
 
 def test_an_empty_log_verifies_intact_with_zero_records(tmp_path: Path) -> None:

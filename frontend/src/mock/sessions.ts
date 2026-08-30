@@ -16,6 +16,21 @@
  * `narrate()`; the text will differ on a re-run (narration prose is not
  * byte-reproducible, see reasoning/narrate.py's module docstring) but the
  * cited rule/feature names and verdict will not.
+ *
+ * `counterfactual` predates being wired for most of these fixtures: the
+ * concrete mandate/transaction values these fixtures were built from
+ * (ceilings, real feature values) were never recorded alongside the rule
+ * names and scores that are, so a real counterfactual cannot be
+ * reconstructed for them without inventing numbers -- left `null` rather
+ * than fabricated, per this file's own "never hand-write model output"
+ * rule. The one exception (invalid_signature, below) does not depend on
+ * any recorded number at all: `counterfactual.deterministic
+ * .verification_counterfactual` reports the same boolean-flip explanation
+ * for every invalid-signature denial regardless of the mandate's other
+ * fields, so it is filled in honestly here. The live path
+ * (`VITE_API_BASE_URL` configured) always renders the real, freshly
+ * computed counterfactual for every session, static or not -- these
+ * fixtures are only the offline fallback.
  */
 
 import type { SessionDecisionResponse } from "../types/contract";
@@ -55,6 +70,7 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
       model: "openai/gpt-oss-120b",
       generated_at: "2026-08-27T13:02:00Z",
     },
+    counterfactual: null,
   },
   {
     session_id: "22222222-2222-4222-8222-222222222222",
@@ -86,6 +102,7 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
       model: "openai/gpt-oss-120b",
       generated_at: "2026-08-27T13:02:05Z",
     },
+    counterfactual: null,
   },
   {
     session_id: "33333333-3333-4333-8333-333333333333",
@@ -128,6 +145,7 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
       model: "openai/gpt-oss-120b",
       generated_at: "2026-08-27T13:02:10Z",
     },
+    counterfactual: null,
   },
   {
     session_id: "44444444-4444-4444-8444-444444444444",
@@ -163,6 +181,7 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
       model: "openai/gpt-oss-120b",
       generated_at: "2026-08-27T13:02:15Z",
     },
+    counterfactual: null,
   },
   {
     session_id: "55555555-5555-4555-8555-555555555555",
@@ -192,6 +211,12 @@ export const MOCK_SESSIONS: SessionDecisionResponse[] = [
       feature_citations: [],
       model: "openai/gpt-oss-120b",
       generated_at: "2026-08-27T13:02:20Z",
+    },
+    counterfactual: {
+      layer: "layer1_verification",
+      feasible: true,
+      edits: [{ field: "signature_valid", real_value: "false", suggested_value: "true" }],
+      explanation: "This verdict flips to ALLOW if the mandate's signature verified.",
     },
   },
 ];

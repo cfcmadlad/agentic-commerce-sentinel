@@ -7,9 +7,16 @@
 # the service runs correctly without it (see service/state.py) -- narration
 # degrades to a stated placeholder in the audit trail rather than failing.
 #
-# Built from the repo root (the build context needs every top-level
-# package: mandate, common, generator, detect, features, eval, reasoning,
-# service), not from inside service/ itself.
+# Built from the repo root (the build context needs every top-level package
+# service/main.py's own import graph actually reaches at runtime: mandate,
+# common, generator, detect, features, eval, reasoning, service,
+# containment, counterfactual, escalation, formal -- verified directly by
+# importing service.main with only these packages present and nothing
+# else, not assumed from a package list left stale after a milestone added
+# a new one. collusion, interop, policy, and manifest are real, tested
+# library/CLI features but are never imported by service/main.py itself,
+# so they are deliberately not copied into this image), not from inside
+# service/ itself.
 
 FROM python:3.12-slim
 
@@ -26,6 +33,10 @@ COPY features ./features
 COPY eval ./eval
 COPY reasoning ./reasoning
 COPY service ./service
+COPY containment ./containment
+COPY counterfactual ./counterfactual
+COPY escalation ./escalation
+COPY formal ./formal
 
 RUN pip install --no-cache-dir --no-deps -e .
 

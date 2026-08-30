@@ -34,8 +34,10 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from containment.store import MutableMandateChainStore
 from detect.behavioral import BehavioralModel
 from detect.calibration import DEFAULT_FALSE_NEGATIVE_TO_FALSE_POSITIVE_COST_RATIO
+from escalation.queue import EscalationQueue
 from eval.pipeline import fit_pipeline
 from features.session import FeatureExtractor
 from generator.attack_config import DEFAULT_ATTACK_BASE_RATE
@@ -55,6 +57,7 @@ FITTING_SEED = 42
 
 N_DEMO_AGENTS = 3
 DEFAULT_AUDIT_LOG_PATH = Path("service_audit.jsonl")
+DEFAULT_ESCALATION_LOG_PATH = Path("service_escalations.jsonl")
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,14 @@ class AppState:
         narration_model: Model identifier recorded on narrations produced
             with `narration_client`.
         demo_agents: Agents registered at startup for exploratory testing.
+        escalation_queue: The human-in-the-loop escalation queue and
+            per-agent circuit breaker, shared so both accumulate across
+            requests for the process's lifetime, same as `ledger` and
+            `extractor`.
+        mandate_store: Every mandate presented in any session this process
+            has decided, keyed by mandate ID, so a later delegated child's
+            `parent_mandate_id` can resolve against a mandate presented in
+            an earlier session -- what `GET /mandates/{id}/chain` reads.
     """
 
     registry: AgentKeyRegistry
@@ -108,6 +119,8 @@ class AppState:
     narration_client: NarrationClient | None
     narration_model: str
     demo_agents: tuple[DemoAgent, ...]
+    escalation_queue: EscalationQueue
+    mandate_store: MutableMandateChainStore
 
 
 def _register_demo_agents(registry: AgentKeyRegistry) -> tuple[DemoAgent, ...]:
@@ -132,12 +145,16 @@ def _register_demo_agents(registry: AgentKeyRegistry) -> tuple[DemoAgent, ...]:
     return tuple(agents)
 
 
-def build_app_state(audit_log_path: Path = DEFAULT_AUDIT_LOG_PATH) -> AppState:
+def build_app_state(
+    audit_log_path: Path = DEFAULT_AUDIT_LOG_PATH, escalation_log_path: Path = DEFAULT_ESCALATION_LOG_PATH
+) -> AppState:
     """Fits the pipeline and assembles the shared state a running service needs.
 
     Args:
         audit_log_path: Where the append-only audit log is read from and
             appended to.
+        escalation_log_path: Where the escalation queue's own hash-chained
+            log is read from and appended to.
 
     Returns:
         The assembled application state.
@@ -177,4 +194,6 @@ def build_app_state(audit_log_path: Path = DEFAULT_AUDIT_LOG_PATH) -> AppState:
         narration_client=narration_client,
         narration_model=DEFAULT_MODEL,
         demo_agents=demo_agents,
+        escalation_queue=EscalationQueue.from_path(escalation_log_path),
+        mandate_store=MutableMandateChainStore(),
     )

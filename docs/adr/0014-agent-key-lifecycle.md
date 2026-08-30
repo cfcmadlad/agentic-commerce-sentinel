@@ -1,0 +1,51 @@
+# ADR 0014: Agent key lifecycle -- revocation and rotation
+
+## Status
+
+Accepted. Built, wired into the live `/sessions/decide` path, and tested.
+
+## Context
+
+`mandate.verification.AgentKeyRegistry` has, since Milestone A, mapped an agent ID and key ID to a trusted public key with no way to withdraw that trust. A compromised agent key, or an agent being offboarded, had no kill switch short of restarting the service with a different registry. This milestone adds revocation and rotation to the registry and wires both into the real verification path, since -- unlike `detect/`, `features/`, and the generator -- `mandate/verification.py` and its live wiring in `service/main.py` are exactly what a key-lifecycle feature has to change to be more than a library that nothing calls.
+
+## Design
+
+### Revocation is a kill switch, checked before the signature
+
+`AgentKeyRegistry.revoke` records a `KeyRevocation` (structured `KeyRevocationReason`, who revoked it, when, and an optional `effective_at` for a delayed cutover). `verify_mandate` checks `registry.is_revoked(...)` **before** `signature_is_valid(...)`: revocation means "do not trust anything signed with this key from this instant on," not "this specific signature looks wrong," so it must fail closed even for a mandate whose signature is otherwise perfectly genuine. A second `revoke` call for the same key replaces the record rather than stacking one.
+
+### Rotation is revocation of the old key with an overlap window
+
+`AgentKeyRegistry.rotate(agent_id, old_key_id, new_key_id, new_public_key, overlap_until, rotated_by, at)` registers the new key immediately and revokes the old one with `effective_at=overlap_until` and reason `ROTATED` -- both keys verify during the overlap, only the new one after. This reuses the same revocation machinery rather than adding a parallel "rotation" concept the verifier would also have to know about.
+
+The overlap window's length is a per-call argument, not a constant `rotate` imposes -- but the `POST /agents/{id}/keys/{old_key_id}/rotate` endpoint's `overlap_hours` field needs *some* default for a caller who has no more specific number in mind, and "no default, caller must always decide" is not actually a safer choice than a stated one: it just moves the decision to whoever is filling in the request body under time pressure, with no guidance. `service.schemas.DEFAULT_KEY_ROTATION_OVERLAP_HOURS = 24.0` is that default. Rationale: 24 hours covers the realistic duration of any single in-flight session many times over -- `eval/latency.py`'s own measured end-to-end decision latency is milliseconds, and even a slow, multi-step agent session completes in seconds to minutes, not hours -- so no legitimate in-flight session is at real risk of straddling the window's close. It is also short relative to a day specifically because rotation is often prompted by *suspected*, not confirmed, key compromise: a caller who already knows the old key is compromised should pass `overlap_hours=0` for an immediate cutover rather than lean on this default, and the field's own docstring says so.
+
+### Three endpoints, no new authoritative concept in `service/main.py`
+
+`POST /agents/{agent_id}/keys/{key_id}/revoke`, `POST /agents/{agent_id}/keys/{old_key_id}/rotate`, and `GET /agents/{agent_id}/keys/{key_id}/revocation` are thin wrappers over the registry methods above, matching the existing escalation-endpoint pattern (`service/schemas.py` request/response models, a human `revoked_by`/`rotated_by` actor field, no side effect beyond the registry itself).
+
+## Real bugs found while verifying this milestone
+
+Building this feature's live-service tests surfaced three separate real bugs, none of them hypothetical or contrived for the tests -- each was caught because the tests actually exercised the live HTTP path rather than only the library functions in isolation.
+
+### 1. Narration was documented as best-effort but was not
+
+`decide()`'s narration call had no exception handling: `NARRATION_UNAVAILABLE_TEXT` already promised "narration is always best-effort and never a precondition for a decision," but that promise only held when no Groq client was configured at all. Once a client *was* configured, any failure from the real call -- a rate limit, a timeout, a transient network error -- propagated uncaught out of `decide()`. Reached through `service.demo_seed.seed_demo_history()` at app startup (a direct Python call, outside any FastAPI request context to catch it in), this took down the entire test fixture, and in production would have taken down `/sessions/decide` itself on any Groq outage, not just narration. This was discovered, not manufactured: this session's own cumulative Groq usage exhausted the account's real daily token quota mid-verification, which is precisely the failure mode "best-effort" is supposed to survive. Fixed by wrapping the `narrate()` call in `decide()` in `try`/`except Exception`, falling back to a new, honestly-worded `NARRATION_FAILED_TEXT` ("the Layer 4 call failed") distinct from the existing `NARRATION_UNAVAILABLE_TEXT` ("no key configured") -- the two fallbacks are kept textually distinct so an audit record or API response never claims narration was never attempted when it was actually attempted and failed.
+
+### 2. Revocation could be evaded by a backdated session timestamp
+
+`decide()` has always called `verify_mandate(..., now=trace.started_at)` -- using the session's own self-reported start time, not the server's wall clock, for every time-based check. This is a deliberate and reasonable choice for the mandate's own validity window (`valid_from`/`expires_at`/`valid_until`): a session that started while its mandate was valid should not later fail just because the mandate expired mid-session, and it keeps decisions deterministic and reproducible from a recorded trace. But wiring the new revocation check into that same `now` parameter made revocation -- a security kill switch that is supposed to apply "from this instant on" regardless of what any request claims -- silently inherit that same request-controlled semantics. A live-service test making this concrete caught it directly: rotating a key with `overlap_hours=0.0` (old key revoked effective immediately, real wall-clock time) and then submitting a trace whose `started_at` predated the rotation call produced a *valid* decision, because the revocation's `effective_at` (real now) had not yet arrived as of the backdated `now` the verifier was actually checking against.
+
+Fixed by giving `verify_mandate` (and, for the same reason, `counterfactual.deterministic.verification_counterfactual`, which re-derives the same six conjuncts independently for its minimal-edit explanations) a second, separate `revocation_checked_at` parameter, defaulting to `now` for backward compatibility with the unit tests in `tests/test_key_lifecycle.py` that legitimately mean "the instant a request arrives" by `now`. `service/main.py::decide()` captures one `decision_now = datetime.now(UTC)` per request and passes it as `revocation_checked_at` to both call sites, while `now=trace.started_at` continues to govern only the mandate's own time-window math. A revocation can no longer be evaded by a request that declares an old start time.
+
+### 3. The counterfactual explainer had no concept of revocation at all
+
+`verification_counterfactual`'s docstring claimed to recompute "all six" of `verify_mandate`'s conjuncts and to always be feasible "since every one of its six conjuncts is either a free boolean or a value with a well-defined boundary" -- true when it was written, before revocation existed as a seventh. Left unchanged, a revoked-key block (`ensemble.blocked=True`, `source=SOURCE_RULES`) would have every one of the original six conjuncts pass, hit the function's `return None` ("mandate already verifies, nothing to explain"), and `service/main.py` would then also get `None` back from `scope_counterfactual` (scope is fine too) -- silently returning `counterfactual: null` for a *blocked* session, contradicting `SessionDecisionResponse`'s own documented contract that `counterfactual` is `None` only for an *allowed* session. Fixed by checking revocation first, before the signature and the other six conjuncts, and returning the project's existing `feasible=False` shape (already used for "no mandate presented," a broken delegation chain, and a no-overlap category violation) with an explanation that a revoked key has no field-level fix -- only re-registering or rotating in a trusted key restores decisions from it. No `formal/model.py` change was needed: like the other `feasible=False` cases, this path returns before ever reaching the Z3 solver, so `mandate_verified`'s six-conjunct model stays exactly what it always was.
+
+## Consequences
+
+**New:** `mandate/verification.py` (`KeyRevocationReason`, `KeyRevocation`, `AgentKeyRegistry.revoke`/`rotate`/`is_revoked`/`revocation_for`, `VerificationFailureReason.KEY_REVOKED`); three endpoints and matching schemas in `service/main.py`/`service/schemas.py`; `tests/test_key_lifecycle.py` (8 tests) plus new live-service and counterfactual tests.
+
+**Also fixed, discovered as a direct consequence of building and testing this milestone rather than pre-existing and unrelated:** `decide()`'s narration call is now exception-safe; revocation checks in both the authoritative verifier and the counterfactual explainer now use the real decision instant, not the request-supplied session start time, closing a real bypass. `service/main.py`'s rate limiter was also made configurable via `SENTINEL_RATE_LIMIT_MAX_REQUESTS`/`SENTINEL_RATE_LIMIT_WINDOW_SECONDS` (mirroring the existing `SENTINEL_CORS_ORIGINS` pattern) so this milestone's larger `tests/test_service.py` suite, sharing one session-scoped client, does not trip the real production default -- a test-infrastructure fix, not a behavior change to the live default itself.
+
+**What this does not cover:** key revocation and rotation are agent-key-level, not mandate-level -- revoking a key invalidates every mandate signed by it, including ones already in flight; there is no separate "revoke this one mandate but not the key" operation, since the project has no observed need for that finer grain yet.

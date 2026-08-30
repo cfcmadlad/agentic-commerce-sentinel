@@ -6,6 +6,12 @@
 #
 # Regenerate after any dependency change with:
 #   pip install -e ".[dev]" && pip freeze --exclude-editable > requirements-lock.txt
+#
+# `truststore` and `setuptools` are deliberately excluded even if present in
+# a local venv: `truststore` is a local workaround for this dev machine's
+# TLS-intercepting proxy (see docs/PROJECT_PLAN.md's Milestone D entry),
+# irrelevant to a normal reviewer/deployment machine, and `setuptools` here
+# is pip's own build backend, not a runtime dependency of this project.
 
 annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -23,6 +29,7 @@ groq==1.7.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
+hypothesis==6.167.0
 idna==3.19
 iniconfig==2.3.0
 joblib==1.5.3
@@ -45,6 +52,7 @@ Pygments==2.21.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
+PyYAML==6.0.3
 ruff==0.16.4
 scikit-learn==1.9.0
 scipy==1.18.1
@@ -52,6 +60,7 @@ shap==0.52.0
 six==1.17.0
 slicer==0.0.8
 sniffio==1.3.1
+sortedcontainers==2.4.0
 starlette==1.6.0
 threadpoolctl==3.6.0
 tqdm==4.70.0

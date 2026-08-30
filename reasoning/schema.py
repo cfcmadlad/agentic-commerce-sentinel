@@ -112,6 +112,58 @@ class Narration:
 
 
 @dataclass(frozen=True)
+class CounterfactualEdit:
+    """One field a counterfactual explanation changes.
+
+    Attributes:
+        field: Dotted name of the changed field (e.g. `"trace.amount"`,
+            `"scope.max_amount"`).
+        real_value: Its actual value in the blocked session, as text.
+        suggested_value: The value that would need to hold instead, as
+            text. Layer 3's edits are formatted to four decimal places,
+            matching `reasoning.narrate`'s own SHAP-value formatting
+            convention.
+    """
+
+    field: str
+    real_value: str
+    suggested_value: str
+
+
+@dataclass(frozen=True)
+class Counterfactual:
+    """A minimal-edit explanation of what would flip a blocked verdict.
+
+    Copied at construction time from whichever of
+    `counterfactual.deterministic.Counterfactual` or
+    `counterfactual.behavioral.BehavioralCounterfactual` actually applies
+    (see `service.main.decide`) -- kept as its own plain type here rather
+    than importing either, the same reasoning `NarrationInput` and
+    `Narration` already apply to `detect`/`reasoning` types: a value copy,
+    never a live reference, is what keeps this record inert.
+
+    Attributes:
+        layer: Which layer produced this explanation --
+            `"layer1_verification"`, `"layer2_scope"`, or
+            `"layer3_behavioral"` (`"layer2_5_containment"` also exists in
+            `counterfactual.deterministic`, but that layer is not wired
+            into the live decision path -- see `service/main.py`).
+        feasible: True if a field-level edit was found. False for a
+            structural case with no edit to suggest (e.g. no mandate was
+            presented at all).
+        edits: The fields to change and their suggested values. Empty when
+            `feasible` is False.
+        explanation: A plain-language sentence stating the edit, or, when
+            infeasible, why none exists.
+    """
+
+    layer: str
+    feasible: bool
+    edits: tuple[CounterfactualEdit, ...]
+    explanation: str
+
+
+@dataclass(frozen=True)
 class AuditRecord:
     """One append-only audit-log entry: everything about one decision, at rest.
 
@@ -127,6 +179,11 @@ class AuditRecord:
         behavioral_score: The Layer 3 score, if computed.
         top_features: Signed per-session SHAP attribution, as in
             `NarrationInput.top_features`.
+        counterfactual: The minimal-edit explanation of what would have
+            allowed this session, if one was computed. None for an
+            allowed session (nothing to explain) or for a blocked session
+            predating this field (see `reasoning.audit_log`'s read-side
+            handling of older entries).
         narrative: The plain-language explanation produced for this record.
         narrated_by_model: Identifier of the model that produced `narrative`.
         created_at: UTC time this record was appended to the audit log.
@@ -140,6 +197,7 @@ class AuditRecord:
     rules_fired: tuple[str, ...]
     behavioral_score: float | None
     top_features: tuple[tuple[str, float], ...]
+    counterfactual: Counterfactual | None
     narrative: str
     narrated_by_model: str
     created_at: datetime

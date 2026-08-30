@@ -3,6 +3,7 @@ import {
   AboutIcon,
   BrandMark,
   DecisionsIcon,
+  DelegationIcon,
   EvaluationIcon,
   ExplorerIcon,
   OrganizationsIcon,
@@ -45,6 +46,7 @@ const SECTIONS = [
   { id: "organizations", label: "Organizations", icon: OrganizationsIcon },
   { id: "decisions", label: "Decisions", icon: DecisionsIcon },
   { id: "sandbox", label: "Sandbox", icon: SandboxIcon },
+  { id: "delegation", label: "Delegation", icon: DelegationIcon },
   { id: "explorer", label: "Explorer", icon: ExplorerIcon },
   { id: "evaluation", label: "Evaluation", icon: EvaluationIcon },
 ];

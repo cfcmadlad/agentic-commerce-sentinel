@@ -20,6 +20,12 @@ dist/
 # a running service instance makes; not something to check in.
 service_audit.jsonl
 
+# Same reasoning, for the escalation queue's own hash-chained log.
+service_escalations.jsonl
+
+# Same reasoning, for run_full_eval.py's own hash-chained manifest log.
+eval_manifests.jsonl
+
 .DS_Store
 .env
 

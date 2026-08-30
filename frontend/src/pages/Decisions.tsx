@@ -139,6 +139,49 @@ function NarrativeView({ session }: { session: SessionDecisionResponse }) {
   );
 }
 
+const COUNTERFACTUAL_LAYER_LABELS: Record<string, string> = {
+  layer1_verification: "Layer 1 · mandate verification",
+  layer2_scope: "Layer 2 · scope enforcement",
+  layer2_5_containment: "Layer 2.5 · delegation containment",
+  layer3_behavioral: "Layer 3 · behavioral model",
+};
+
+function CounterfactualView({ session }: { session: SessionDecisionResponse }) {
+  if (!session.ensemble.blocked) {
+    return <p className="section-note">This session was allowed -- there is nothing to explain.</p>;
+  }
+  const cf = session.counterfactual;
+  if (!cf) {
+    return (
+      <p className="section-note">
+        No counterfactual was computed for this session (the offline fixture predates this field --
+        see a live-connected session for a real one).
+      </p>
+    );
+  }
+  return (
+    <div>
+      <div className="narrative-verdict">
+        <span className="badge badge--warn">{COUNTERFACTUAL_LAYER_LABELS[cf.layer] ?? cf.layer}</span>
+        <span className="narrative-meta">{cf.feasible ? "minimal edit found" : "no edit found"}</span>
+      </div>
+      <p className="narrative-text">{cf.explanation}</p>
+      {cf.edits.length > 0 && (
+        <div className="citation-lists">
+          <div className="citation-group">
+            <span className="citation-group__label">Fields changed</span>
+            {cf.edits.map((edit) => (
+              <span className="badge badge--block" key={edit.field}>
+                {edit.field}: {edit.real_value} → {edit.suggested_value}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AttributionView({ session }: { session: SessionDecisionResponse }) {
   if (!session.attribution) {
     return (
@@ -235,6 +278,17 @@ export default function Decisions() {
               why — narration only, produced after the verdict and structurally unable to change it.
             </p>
             <NarrativeView session={session} />
+          </div>
+
+          <div className="panel">
+            <h2 className="section-title">What would have changed the verdict</h2>
+            <p className="section-note">
+              The smallest edit that flips a blocked session to allowed. For Layers 1 and 2, verified
+              against the same Z3 encoding that proves this system's formal safety properties — not a
+              guess. For Layer 3, a bounded search against the real model's own output, labelled as a
+              heuristic because it is one.
+            </p>
+            <CounterfactualView session={session} />
           </div>
         </div>
       </div>

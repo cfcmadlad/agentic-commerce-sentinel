@@ -4,6 +4,15 @@
 
 Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager). New here? [`OVERVIEW.md`](OVERVIEW.md) is a five-minute, plain-language read before this document's full technical depth.
 
+### What to look at in three minutes
+
+- **The architecture** ([§3](#3-architecture)): four layers, deterministic checks that can only ever add a block on top of what came before, never get overridden by the learned one.
+- **The headline result, with its receipt** ([§7](#7-evaluation-results)): AUC-PR 0.9982, p ≈ 1.4 × 10⁻¹² — and the exact command plus manifest hash that reproduces it byte-for-byte, not just a number to trust.
+- **The result that mattered most** (§7's held-out class result, near the end): the original architecture caught 0% of a held-out attack class it was never trained or tuned against; a new deterministic layer built specifically for the gap recovered 76.14% of it, and the 2.59% still missed is disclosed, not hidden.
+- **A bug the method itself caught** (`docs/adr/0005-formal-verification-of-deterministic-layers.md`): a deliberately reversed comparison operator returns a genuine Z3 counterexample; reverted, it returns `unsat` again.
+- **What each layer does and does not stop** ([`THREAT_MODEL.md`](THREAT_MODEL.md)): one page, defense-only throughout.
+- **Where it still falls short** ([`EXCEPTIONS.md`](EXCEPTIONS.md), [§11](#11-known-limitations-stated-plainly)): named, reproducible categories of session this system cannot confidently classify, not a general disclaimer.
+
 ---
 
 ## Table of contents
@@ -153,6 +162,8 @@ Everything above this point is tested — exercised against concrete cases, incl
 
 `python run_verify_policy_properties.py`: **8/8 properties proved**, on the first real run, in well under a second. As a demonstration that this is a real check and not a rubber stamp, `docs/adr/0005-formal-verification-of-deterministic-layers.md` records a deliberately introduced bug — one of `containment/engine.py`'s three near-identical subset checks reversed, a realistic copy-paste mistake — kept as a permanent, re-runnable test (`tests/test_formal_verify.py`) rather than a one-off script: Z3 finds the maximally illustrative counterexample on its own (a child claiming every merchant category, delegated from a parent claiming none, silently accepted by the reversed check), and the same check restored to its real, shipped direction proves `unsat` again. The full property list, the encoding's stated abstractions, and an explicit accounting of what this document proves versus what it does not (Layer 3, Ed25519's own correctness, the ancestor-chain graph walk itself, values outside the declared bounds) are in that ADR.
 
+**Property-based testing of the stateful ledger Z3 does not run.** The Z3 proof above treats `containment/engine.py::enforce_containment` as a pure function and unrolls the sibling-cap recurrence for a fixed 4-sibling group — it never runs `containment/gate.py::ContainmentGate` itself, the real class that accumulates a per-parent ledger across an arbitrary-length stream of mandates. `tests/test_containment_properties.py` (Hypothesis, pinned) generates random delegation trees and confirms two invariants against the real, stateful gate — no accepted mandate exceeds its parent's ceiling, and committed siblings per parent never exceed it — plus a cycle-ring strategy confirming every member of a genuine cycle is rejected. A deliberately reintroduced bug (a gate that forgets to track committed siblings at all) is kept as a permanent test proving the property is a real check, the same demonstration this section's own Z3 test makes. See `docs/adr/0012-property-based-verification-of-containment.md` for the full comparison of what each method proves.
+
 ### Cross-agent collusion / ring detection (`/collusion`)
 
 Every layer above this point — Layers 1 through 3, and Layer 2.5 — reasons about one session, or one mandate's own delegation chain, in isolation. None of them look *across* agent identities. This layer does: it asks whether several ostensibly independent agents are, in fact, the same operator (a shared device fingerprint), or are cooperating to route one large action through many small, individually-unremarkable identities (structuring across agents, or a ring transacting with overlapping counterparties in a coordinated window). This is a structurally different class of coverage from the disclosed held-out mandate-chaining gap or Layer 2.5's own single-chain gap — no mandate delegation is involved anywhere in this layer, and it makes no claim of having addressed either of those gaps.
@@ -207,13 +218,51 @@ Three modules, each with a narrow job, matching the split already established fo
 
 **Adversarial-prompt resistance**, tested rather than assumed. `merchant_id`, `merchant_category`, and `item_category` are nominally free text — the type places no constraint on them beyond being strings, even though every generator only ever populates them from a fixed catalog. Six payload types were injected into these fields and run against the real model: a direct instruction override, a fake `SYSTEM:` line, a request to leak the system prompt, fake closing delimiters, a role-play jailbreak, and a Cyrillic-homoglyph variant of the direct override. Each was tested twice — once against a well-behaved response, once against a fake client that actively tries to comply with whatever it reads — and the reported verdict never moved in either case, because it is derived from the frozen input, not the model's text. Full payload set and reasoning: `tests/test_prompt_injection_resistance.py`.
 
+### Counterfactual explanations (`/counterfactual`)
+
+Attribution (`/detect/attribution.py`) and narration (§4, above) answer "why was this blocked". This package answers a different, complementary question: "what would have needed to be true for this to be allowed" — a minimal-edit counterfactual, computed with two structurally different methods depending on which layer produced the block.
+
+For Layers 1, 2, and 2.5 (`counterfactual/deterministic.py`), the named failure reasons in `mandate.verification.VerificationFailureReason`, `detect.scope.ScopeViolationReason`, and `containment.schema.ContainmentViolationReason` are independent conjuncts — no two share a field — which makes "edit exactly the currently-failing fields to their own boundary" provably minimal: no smaller edit can work, and nothing outside the failing set needs to move. Every suggested edit is then checked satisfiable against the exact `mandate_verified`/`in_scope`/`contained` Z3 predicates `/formal` built for its own exhaustive proofs, not a second hand-written copy of "is this valid" — if a future change ever produced an edit the real predicate rejects, this raises loudly rather than returning a wrong answer. Layer 2.5's counterfactual is real and tested but library-level only: containment itself is not wired into the live API service (below), so there is nowhere live to surface it yet.
+
+For Layer 3 (`counterfactual/behavioral.py`), there is no closed-form encoding to consult — the same reason `/formal` never encodes the learned model. This module instead bisects against the real fitted model's own `predict_proba`, one feature at a time, prioritized by that session's SHAP attribution, discovering empirically which direction (higher or lower) actually reduces the score rather than assuming one: an early design assumed every suspicious feature should shrink toward zero, which is wrong for `hours_since_mandate_last_use`-style features where a *low* value, not a high one, is what reads as suspicious. `hour_of_day` and `day_of_week` are excluded from the search entirely, regardless of their SHAP rank, per this project's standing rule against calendar framing. This method is explicitly a bounded heuristic, not an exhaustive search of the model's decision surface, and every explanation string it produces says so — including reporting "no counterfactual found" when the search's scope genuinely does not find one, rather than always claiming success.
+
+Wired into the live service and the dashboard for Layers 1–3; Layer 2.5 stays library-level. Full design, including a real forward-compatibility bug caught before shipping (naively serializing the new audit-record field would have broken hash-chain verification for every pre-existing entry), is in `docs/adr/0008-counterfactual-explanations.md`.
+
+### Escalation queue and circuit breaker (`/escalation`)
+
+A session Layer 3 alone flags (`SOURCE_BEHAVIORAL`) automatically opens an `Escalation` — `open → reviewed → resolved`, every transition hash-chained (`common/hash_chain.py`, generalized from `/reasoning`'s own hash-chain design rather than duplicated) with the acting party recorded. `review`/`resolve`/a circuit-breaker `reset` all reject the system as an actor outright (`HumanActionRequiredError`) — human-in-the-loop is enforced, not merely documented. A deterministic per-agent circuit breaker (a rolling window of escalations, injected timestamps rather than wall-clock time, so it stays exactly as reproducible as everything else here) suspends an agent outright once enough accumulate; suspension is sticky — it does not clear itself as the triggering escalations age out of the window, only an explicit human reset lifts it. `service/main.py::decide` checks this before running Layers 1-3 at all: a suspended agent's session is hard-blocked immediately, via a service-layer `SOURCE_CIRCUIT_BREAKER` marker, not a change to `detect/ensemble.py`. See `docs/adr/0009-escalation-queue-and-circuit-breaker.md`.
+
+### AP2 interop adapter (`/interop`)
+
+`interop/adapter.py` translates between AP2's real `IntentMandate`/`CartMandate` (verified directly against the live `google-agentic-commerce/AP2` repository before writing anything, not assumed) and this project's own `Mandate`/`MandateScope`. That verification found the fit looser than an earlier draft of this document claimed — see §8 for the full story — so six of the ten translated fields are explicit, caller-supplied parameters rather than derived ones, and the adapter always returns an *unsigned* mandate: AP2's Verifiable-Credential signatures are a different scheme entirely from this project's Ed25519, and no attempt is made to bridge that trust boundary. Full field-by-field mapping in `docs/adr/0010-ap2-interop-adapter.md`.
+
+### Delegation graph (`GET /mandates/{id}/chain`)
+
+A live, on-demand read — never folded into `/sessions/decide` itself — that walks a mandate's resolved ancestor chain and reports each link's own Layer 2.5 containment verdict, computed by the same `enforce_containment` the offline evaluation uses. The frontend's Delegation view renders this as a graph with the violating edge highlighted, side by side with the real Layer 1-3 narration for the same session — deliberately, since two of the three built-in scenarios show a session Layers 1-3 allow (it fits its own declared ceiling) while this chain view independently flags it, a live, clickable instance of the exact gap §7 and §11 already disclose. See `docs/adr/0011-delegation-graph-and-narration-chat.md`.
+
+### Policy as code (`/policy`)
+
+`policy/default_policy.yaml` is a declarative re-encoding of Layer 2's real nine rules — not a new rule set — as a versioned, linted YAML document. YAML was chosen over a custom expression grammar because every one of those rules is a single comparison (one field against another, or one field against a set); a closed field-path allowlist makes "no policy construct may express a mutating or offensive action" true by construction, not by runtime policing. `policy/linter.py` catches unreachable (a non-orderable field in a numeric comparison), contradictory (two rules firing the same named reason), and unfireable (a field compared to itself) rules. `tests/test_policy_behavioral_identity.py` proves the compiled policy reproduces `enforce_scope`'s real reasons exactly, in order, over the full generated corpus. Deliberately not wired into `/sessions/decide` as the live authoritative source — the same boundary already drawn for Layer 2.5. See `docs/adr/0013-policy-as-code.md`.
+
+### Agent key lifecycle (`/agents/{id}/keys`)
+
+`mandate.verification.AgentKeyRegistry` supports revocation and rotation, not just registration. Revocation (`revoke`, with a structured `KeyRevocationReason` and an optional delayed `effective_at`) is checked in `verify_mandate` *before* the signature itself — a kill switch means "distrust everything signed with this key from this instant on," not a comment on any one signature's quality. Rotation (`rotate`) reuses the same mechanism: the new key is registered immediately and the old one is revoked with `effective_at` set to the end of a documented overlap window, so both verify during the handover and only the new one after. All three operations are human actions exposed via endpoints (`POST /agents/{id}/keys/{key_id}/revoke`, `POST /agents/{id}/keys/{old_key_id}/rotate`, `GET /agents/{id}/keys/{key_id}/revocation`) — revocation is never automatic.
+
+Building this milestone's live-service tests surfaced a real, previously-latent bypass: `decide()` had always evaluated a mandate's time-window checks against the *session's own* self-reported start time rather than the server's clock (a deliberate, reasonable choice for those checks, keeping decisions reproducible from a recorded trace) — but wiring revocation into that same value meant a session could evade a live revocation simply by declaring an old start time. Fixed by giving `verify_mandate` a second, separate `revocation_checked_at` parameter tied to the actual decision instant, independent of anything the request itself claims. Full account, including two further bugs this same testing pass caught (a non-best-effort narration path, and a counterfactual explainer with no concept of revocation at all), is in `docs/adr/0014-agent-key-lifecycle.md`.
+
+### Run manifests and reproducibility attestation (`/manifest`)
+
+Every `run_full_eval.py` run builds a `RunManifest` (`manifest/schema.py`): the exact corpus (reusing its own `params_digest` rather than recomputing one), this run's own tunables hashed together, every named seed (the corpus's base seed, the three per-attack-class offsets, Layer 3's `random_state`, the bootstrap's own seed), the working tree's git commit and whether it was dirty, `requirements-lock.txt`'s hash, and the run's full metrics embedded verbatim — a self-contained receipt, not a pointer to a report that could itself go missing or drift. It is hashed and appended to a hash-chained `eval_manifests.jsonl` (the third log built on `common/hash_chain.py`, after the audit log and escalation queue) via `--manifest-out`/`--manifest-log`. `run_verify_manifest.py` reads one back, standalone or by content hash from the log, and recomputes the cheap structural inputs (git commit, dependency-lock hash, default corpus-parameter digest) against the current working tree — not a full rerun, which is a separate, far more expensive operation.
+
+Reproducibility was actually checked, not assumed: the same command run twice produced byte-identical results for every metric — every threshold, precision/recall figure, bootstrap-CI bound, calibration value, and SHAP attribution — except wall-clock latency timing, which by definition measures that run's own hardware conditions and is disclosed as outside this guarantee rather than forced into a false determinism. Full account in `docs/adr/0015-run-manifests.md`.
+
 ### API service (`/service`)
 
-A FastAPI service wrapping the full four-layer pipeline behind five endpoints: `POST /sessions/decide` (submit a session trace and a signed mandate, get the complete decision — baseline, ensemble, attribution, narrative — back), `GET /audit/{session_id}`, `POST /agents/register`, `GET /agents/demo` (a handful of deterministically keyed agents registered at startup, private keys included in the response — safe specifically because they are re-derivable from a public seed string by anyone who reads the source, not real secrets, in a project where every session is synthetic and defense-only), and `GET /health`.
+A FastAPI service wrapping the full four-layer pipeline behind endpoints including `POST /sessions/decide` (submit a session trace and a signed mandate, get the complete decision — baseline, ensemble, attribution, narrative, and, for a blocked session, a counterfactual explanation — back), `GET /audit/{session_id}`, `POST /agents/register`, `GET /agents/demo` (a handful of deterministically keyed agents registered at startup, private keys included in the response — safe specifically because they are re-derivable from a public seed string by anyone who reads the source, not real secrets, in a project where every session is synthetic and defense-only), `GET /health`, the escalation-queue and circuit-breaker endpoints above, `GET /mandates/{id}/chain`, and the agent key lifecycle endpoints above.
 
 The request body reuses `SessionTrace` and `SignedMandate` directly rather than a parallel schema, since both are already the real internal types; the response schema is written explicitly field-by-field from the real decision dataclasses, the same convention `eval/report_json.py` already established for the metrics export, for the same reason — several fields (enum members) are not JSON-safe as-is. Layer 3 is fit once at startup against the identical 20,000-session corpus this document's own evaluation numbers come from, not a separately trained or pickled artifact.
 
-Narration is best-effort at the service boundary the same way it is everywhere else in this project: if no Groq key is configured, `narrative` comes back `null`, but a real audit record is still appended for every decision, with an honest placeholder stating narration was unavailable rather than a fabricated explanation. Rate limiting and request logging are hand-rolled middleware — a few dozen lines each — rather than a new dependency for something this small. An unhandled exception is always mapped to a generic message with the real error logged server-side, never surfaced to the caller as a stack trace.
+Narration is best-effort at the service boundary the same way it is everywhere else in this project: if no Groq key is configured, or if a configured call actually fails (a provider error, rate limit, or timeout — `decide()` catches this explicitly rather than letting it fail the whole decision), `narrative` comes back `null`, but a real audit record is still appended for every decision, with an honest placeholder stating which of the two happened rather than a fabricated explanation. Rate limiting and request logging are hand-rolled middleware — a few dozen lines each — rather than a new dependency for something this small. An unhandled exception is always mapped to a generic message with the real error logged server-side, never surfaced to the caller as a stack trace.
 
 ## 5. Synthetic data: how it's generated and why it can be trusted
 
@@ -298,6 +347,8 @@ flowchart LR
 Everything feeding Layer 1 or Layer 2 above is caught by the deterministic rules alone. Rapid reuse and behavioral-only impersonation have nothing upstream of Layer 3 to catch them — which is exactly what the numbers in [§7](#7-evaluation-results) show, both before and after Layer 3 was added.
 
 ## 7. Evaluation results
+
+Every number below, up to the held-out result, comes from one real run of `python run_full_eval.py --n-legitimate 20000 --seed 42` — its full reproducibility receipt (corpus digest, every seed, the git commit, the dependency-lock hash, and the complete metrics this section quotes, embedded verbatim) is [`docs/manifests/headline_full_evaluation.manifest.json`](docs/manifests/headline_full_evaluation.manifest.json), content hash `c544e6a40ecf1e1aef91ce297ecdec47090951d10f0d55dfb2259fefee0943a6`. `python run_verify_manifest.py --manifest-path docs/manifests/headline_full_evaluation.manifest.json` checks that hash's recorded inputs against whatever working tree you're reading this from. See [§4](#run-manifests-and-reproducibility-attestation-manifest) and `docs/adr/0015-run-manifests.md` for what a manifest does and does not guarantee — every field it records, including every number in this section, was independently confirmed to reproduce byte-for-byte across two separate runs before this hash was cited.
 
 ### Rules-only baseline
 
@@ -422,7 +473,7 @@ This is the largest of several named exception categories this system currently 
 
 ## 8. Why AP2, not NPCI's UAP
 
-The mandate format is modeled on **AP2 (Google's Agent Payments Protocol)**, specifically its Intent Mandate — a real, public, versioned specification (`google-agentic-commerce/AP2`, v0.2.0, April 2026) that already defines exactly the kind of bounded authorization this project needs: a signed record of spending limits, category constraints, and an expiration, produced by a user's own device.
+The mandate format takes AP2 (Google's Agent Payments Protocol, `google-agentic-commerce/AP2`) as its reference point — a real, public, citable spec — rather than an invented format. That said, `interop/`'s adapter (§4) exists specifically because a direct verification of AP2's actual `IntentMandate`/`CartMandate` schema (done for that milestone, not assumed) found the fit looser than earlier drafts of this document claimed: AP2's `IntentMandate` carries no spending-limit or category field at all — the real price commitment lives inside a separate, *merchant*-signed `CartMandate` three levels deep (`contents.payment_request.details.total`), merchant/item targeting is by specific ID list rather than category, AP2 mandates are single-transaction by construction (no reusable multi-use budget), and there is no delegation-chain concept anywhere in its schema. This project's `MandateScope` was designed independently to fit a reusable, category-scoped, multi-agent-delegation model this project needs and AP2 does not represent — "AP2-inspired," not "an implementation of AP2." `docs/adr/0010-ap2-interop-adapter.md` has the full field-by-field mapping, including exactly which fields have no AP2 source and must be supplied by a caller rather than translated.
 
 It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this writing, UAP has no published technical schema. It's publicly reported to be under active development at NPCI, built on top of UPI Circle's existing delegated-payments feature, and still awaiting RBI regulatory approval before launch. Building against a real, citable spec is a defensible engineering choice; claiming to implement UAP itself, when no public schema exists to implement, would not be. Where UAP's reported design is known — per-merchant spending limits, consent-based delegation — this project's schema follows that direction anyway, so the fit is closer than "arbitrary substitute picked for convenience."
 
@@ -430,13 +481,15 @@ It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this w
 
 **Live demo hosted publicly against a live API, not done.** The frontend's live demo view genuinely calls the real API service (§4) when a `VITE_API_BASE_URL` is configured — real signed requests, a real running pipeline, real accumulated agent history seeded once at startup (`service/demo_seed.py`) — verified end to end against a local instance. What is not done is standing that API service up as a public, continuously running deployment: that is a different risk profile from hosting the static frontend (a real process, a Groq secret to manage, a model-fit cold start on every restart) and remains a deliberate, separate decision. The publicly hosted frontend therefore still falls back to its original static fixtures, unchanged in behavior from before the live wiring existed.
 
-**Docker build for the API service, untested end to end.** The Dockerfile is written to the same install steps already verified working on a bare machine, but has not itself been built and run in a container in this project's own development environment. Flagged here rather than silently assumed to work.
+**Docker build for the API service, untested end to end.** The Dockerfile is written to the same install steps already verified working on a bare machine, but has not itself been built and run in a container in this project's own development environment (no Docker binary available here). Its `COPY` list was verified a different way instead: `service.main`'s full transitive project-package import graph was traced by actually importing it with only the Dockerfile's copied packages present and nothing else, catching a real staleness bug this way -- the list was missing `containment`, `counterfactual`, `escalation`, and `formal`, all genuinely required at import time by `service/main.py`, added after milestones that came after the Dockerfile was first written. That check does not substitute for a real `docker build && docker run && curl /health`, which is flagged here rather than silently assumed to work.
 
 **MCP connector**, and the frontend's original three-view design, were both cut from scope to keep the evaluation rigor in §7 from being the thing that got shortened under deadline pressure instead.
 
 ## 10. Defense-only, by design
 
 This project is a **detector and verifier**, not an enforcement or offensive system, at every layer. The attack generator described in §6 exists solely to produce synthetic traffic to test this project's own detector against; it is not designed to, and does not, generalize to attacking real systems — the self-signed mandates it produces are only ever valid inside this repository's own synthetic key registry. Layer 3's model is trained and evaluated the same way: it only ever adds a block on top of what Layers 1 and 2 already allow, and it cannot override a deterministic rejection. Every automated finding is designed to escalate to a human reviewer rather than act unilaterally.
+
+[`THREAT_MODEL.md`](THREAT_MODEL.md) states this precisely, one layer at a time: what each of Layers 1-4, formal verification, and collusion detection actually stops, and what each explicitly does not.
 
 ## 11. Known limitations, stated plainly
 
@@ -458,7 +511,9 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
 
 ```
 /mandate      mandate schema, Ed25519 signing, verification
-/common       shared session trace / ground-truth label types
+/common       shared session trace / ground-truth label types, plus
+              hash_chain.py -- generic hash-chain primitives /reasoning and
+              /escalation each build a typed store on top of
 /generator    legitimate traffic generator, all four attack generators
                 attacks/chaining.py   held-out class only, see §6/§7
                 attacks/held_out.py   held-out corpus builder — the training
@@ -477,11 +532,34 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 model.py       Z3 encoding of the real decision logic
                 properties.py  the eight safety properties
                 verify.py      the negate-and-check-unsat harness
+/counterfactual minimal-edit counterfactual explanations (see §4)
+                deterministic.py Layers 1/2/2.5, verified against /formal
+                behavioral.py    Layer 3, SHAP-prioritized bisection search
 /collusion    cross-agent collusion/ring detection (see §4)
                 graph.py       agent graph: fingerprint + burst edges
                 community.py   Louvain community detection (networkx)
                 scoring.py     fingerprint signal + structuring ratio
                 detect.py      orchestration into a verdict per candidate
+/escalation   human-in-the-loop escalation queue + circuit breaker (see §4)
+                schema.py         events, the materialized Escalation view
+                log.py            hash-chained persistence (common/hash_chain.py)
+                circuit_breaker.py deterministic per-agent suspension
+                queue.py          state transitions, human-actor enforcement
+/interop      AP2 interop adapter (see §4)
+                ap2_types.py   field-verified mirrors of AP2's real models
+                adapter.py     ap2_to_mandate / mandate_to_ap2
+/policy       policy as code: Layer 2's rules as a versioned YAML document (see §4)
+                schema.py         pydantic schema, closed field-path allowlist
+                loader.py         strict YAML loading, precise errors
+                compiler.py       read-only field resolution and evaluation
+                linter.py         unreachable/contradictory/unfireable checks
+                default_policy.yaml  the real nine detect/scope.py rules
+/manifest     run manifests: reproducibility attestation (see §4)
+                schema.py   RunManifest, its JSON mapping, its own content hash
+                build.py    builds one from a run's concrete inputs (corpus,
+                            config, seeds, git commit, dependency lock)
+                verify.py   recomputes recorded inputs against the working tree
+                log.py      hash-chained persistence (common/hash_chain.py)
 /features     causal feature extraction for the behavioral model
 /eval         evaluation harnesses and the full metric set:
                 gate.py               rules-only baseline report
@@ -507,6 +585,8 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 demo_scenarios.py   five fixed live-demo request bodies, real
                                     signed mandates, deterministic across processes
                 demo_seed.py        replays warm-up history through decide() at startup
+                delegation_chain.py  builds a mandate's chain + containment verdicts
+                delegation_scenarios.py three fixed delegation-chain demo scenarios
 /frontend     single-page ops dashboard (sidebar nav, no router) — a live
               company/organization/agent/session drill-down, a live-demo
               decisions view (wired to a live, configured API service, falls
@@ -515,7 +595,9 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
               explorer (scatter + risk-terrain views), and a static
               evaluation report export
 /docs/adr     architecture decision records
-tests/        567 tests, covering every layer above
+/docs/manifests reproducibility manifests backing this document's own headline
+              numbers (see §7, `docs/adr/0015-run-manifests.md`)
+tests/        718 tests, covering every layer above
 run_gate.py             command-line entry point for the rules-baseline evaluation
 run_ensemble_eval.py    command-line entry point for the Layer 3 pipeline
 run_full_eval.py        command-line entry point for the full evaluation
@@ -532,6 +614,10 @@ run_collision_export.py exports real per-session scores/features for the
                         frontend's data-exploration views
 run_live_demo_export.py exports the live demo's five real signed request
                         bodies for the frontend to POST against a running service
+run_delegation_demo_export.py exports the three delegation-chain demo
+                        scenarios (real containment verdicts, real narration)
+run_verify_manifest.py command-line entry point verifying a run manifest's
+                        recorded inputs against the current working tree
 EXCEPTIONS.md           named categories of sessions this system cannot
                         confidently classify, each reproducible from the
                         evaluation commands above
@@ -547,18 +633,21 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 567 passed
+pytest -q                                              # expect: 718 passed
 ruff check .                                           # expect: All checks passed!
-mypy mandate common generator detect features eval tests reasoning service containment formal collusion   # expect: Success: no issues found
+mypy mandate common generator detect features eval tests reasoning service containment formal collusion counterfactual escalation interop policy manifest   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 python run_ensemble_eval.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
-python run_full_eval.py --n-legitimate 20000 --seed 42   # the full evaluation
+python run_full_eval.py --n-legitimate 20000 --seed 42 --manifest-out my.manifest.json   # the full evaluation + its reproducibility manifest
+python run_verify_manifest.py --manifest-path my.manifest.json   # confirm that manifest's inputs still match this working tree
 python run_held_out_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042   # the held-out class result
 python run_containment_eval.py --n-legitimate 20000 --seed 42 --held-out-n-legitimate 20000 --held-out-seed 90042   # the Layer 2.5 result
 python run_verify_policy_properties.py                 # the Z3 formal-verification result (8/8 proved)
 python run_collusion_eval.py                            # the collusion-ring detection result
 python run_verify_audit_chain.py --log-path service_audit.jsonl   # tamper-evidence check on an audit log
 ```
+
+This reproduces every number in [§7](#7-evaluation-results) exactly, including the manifest hash already cited there — `run_full_eval.py --n-legitimate 20000 --seed 42 --manifest-out headline.manifest.json` on a clean clone produces a manifest whose embedded metrics match [`docs/manifests/headline_full_evaluation.manifest.json`](docs/manifests/headline_full_evaluation.manifest.json) field for field (git commit and timestamp aside), confirmed by running it twice independently before that file was committed — see `docs/adr/0015-run-manifests.md`.
 
 Seven of the tests exercise Layer 4's live Groq call and are skipped unless `GROQ_API_KEY` is set (copy `.env.example` to `.env` and fill in a key from [console.groq.com/keys](https://console.groq.com/keys) — the rest of the suite, and the detection pipeline itself, works identically without one; narration alone degrades to a stated placeholder, see §4).
 

@@ -59,7 +59,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from reasoning.schema import AuditRecord
+from reasoning.schema import AuditRecord, Counterfactual, CounterfactualEdit
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +77,21 @@ def _record_to_json_dict(record: AuditRecord) -> dict[str, object]:
 
     Explicit field-by-field mapping, not a generic `dataclasses.asdict`
     walk: `record_id`/`session_id`/`mandate_id` (UUID), `created_at`
-    (datetime), and `top_features` (a tuple of tuples) are not JSON-safe
-    as-is, the same reasoning `eval/report_json.py` states for its own
-    explicit mapping.
+    (datetime), `top_features` (a tuple of tuples), and `counterfactual`
+    (a nested dataclass) are not JSON-safe as-is, the same reasoning
+    `eval/report_json.py` states for its own explicit mapping.
+
+    `counterfactual` is omitted from the dict entirely when None, rather
+    than written as an explicit `null` -- added specifically so this
+    function's output for a `None` counterfactual is byte-identical to what
+    it produced before this field existed. Every entry appended before this
+    field was added has `counterfactual=None` on read-back (see
+    `_counterfactual_from_json_dict`'s handling of an absent key), and its
+    stored `record_hash` was computed by hashing a dict with no
+    `"counterfactual"` key at all; including the key as `null` here would
+    change the canonical bytes for those entries and make
+    `reasoning.audit_chain.verify_chain` report every one of them as
+    tampered, which they are not.
 
     Args:
         record: The record to render.
@@ -87,7 +99,7 @@ def _record_to_json_dict(record: AuditRecord) -> dict[str, object]:
     Returns:
         A dict safe to pass to `json.dumps`.
     """
-    return {
+    payload: dict[str, object] = {
         "record_id": str(record.record_id),
         "session_id": str(record.session_id),
         "mandate_id": str(record.mandate_id) if record.mandate_id is not None else None,
@@ -100,6 +112,69 @@ def _record_to_json_dict(record: AuditRecord) -> dict[str, object]:
         "narrated_by_model": record.narrated_by_model,
         "created_at": record.created_at.isoformat(),
     }
+    if record.counterfactual is not None:
+        payload["counterfactual"] = _counterfactual_to_json_dict(record.counterfactual)
+    return payload
+
+
+def _counterfactual_to_json_dict(counterfactual: Counterfactual | None) -> dict[str, object] | None:
+    """Renders one `Counterfactual` (or its absence) as a JSON-safe dict.
+
+    Args:
+        counterfactual: The counterfactual to render, or None.
+
+    Returns:
+        None if `counterfactual` is None, else a JSON-safe dict.
+    """
+    if counterfactual is None:
+        return None
+    return {
+        "layer": counterfactual.layer,
+        "feasible": counterfactual.feasible,
+        "edits": [
+            {"field": edit.field, "real_value": edit.real_value, "suggested_value": edit.suggested_value}
+            for edit in counterfactual.edits
+        ],
+        "explanation": counterfactual.explanation,
+    }
+
+
+def _counterfactual_from_json_dict(data: object) -> Counterfactual | None:
+    """Reconstructs one `Counterfactual` from a JSON-decoded value.
+
+    Args:
+        data: The decoded `"counterfactual"` value. None (including when
+            the key is absent entirely, from an audit record written
+            before this field existed) reconstructs as None -- an older
+            entry is read back exactly as it was written, not treated as
+            malformed.
+
+    Returns:
+        The reconstructed counterfactual, or None.
+
+    Raises:
+        ValueError: If `data` is present but not a dict, or an `edits`
+            entry is not a `{"field", "real_value", "suggested_value"}`
+            mapping.
+    """
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise ValueError("audit record 'counterfactual' must be a dict or null")
+    edits_raw = data["edits"]
+    if not isinstance(edits_raw, list):
+        raise ValueError("audit record 'counterfactual.edits' must be a list")
+    edits = tuple(
+        CounterfactualEdit(
+            field=str(edit["field"]),
+            real_value=str(edit["real_value"]),
+            suggested_value=str(edit["suggested_value"]),
+        )
+        for edit in edits_raw
+    )
+    return Counterfactual(
+        layer=str(data["layer"]), feasible=bool(data["feasible"]), edits=edits, explanation=str(data["explanation"])
+    )
 
 
 def _record_from_json_dict(data: dict[str, object]) -> AuditRecord:
@@ -113,9 +188,9 @@ def _record_from_json_dict(data: dict[str, object]) -> AuditRecord:
         The reconstructed record.
 
     Raises:
-        ValueError: If `rules_fired` or `top_features` is not a list, or if
-            a `top_features` entry is not a two-element `[name, value]`
-            pair.
+        ValueError: If `rules_fired` or `top_features` is not a list, if a
+            `top_features` entry is not a two-element `[name, value]` pair,
+            or if `counterfactual` is present but malformed.
         KeyError: If a required field is missing.
     """
     rules_fired_raw = data["rules_fired"]
@@ -148,6 +223,7 @@ def _record_from_json_dict(data: dict[str, object]) -> AuditRecord:
         rules_fired=tuple(str(r) for r in rules_fired_raw),
         behavioral_score=behavioral_score,
         top_features=tuple(top_features),
+        counterfactual=_counterfactual_from_json_dict(data.get("counterfactual")),
         narrative=str(data["narrative"]),
         narrated_by_model=str(data["narrated_by_model"]),
         created_at=datetime.fromisoformat(str(data["created_at"])),

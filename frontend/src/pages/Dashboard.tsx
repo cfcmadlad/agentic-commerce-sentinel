@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import About from "./About";
 import Decisions from "./Decisions";
+import Delegation from "./Delegation";
 import Evaluation from "./Evaluation";
 import Explorer from "./Explorer";
 import Sandbox from "./Sandbox";
@@ -148,6 +149,11 @@ export default function Dashboard() {
       <section id="sandbox">
         <h1>Sandbox</h1>
         <Sandbox />
+      </section>
+
+      <section id="delegation">
+        <h1>Delegation</h1>
+        <Delegation />
       </section>
 
       <section id="explorer">

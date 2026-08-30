@@ -89,6 +89,17 @@ export function ExplorerIcon({ className }: { className?: string }) {
   );
 }
 
+export function DelegationIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="5.5" r="2" {...STROKE} />
+      <circle cx="6" cy="18.5" r="2" {...STROKE} />
+      <circle cx="18" cy="18.5" r="2" {...STROKE} />
+      <path d="M12 7.5v4M12 11.5 6 16.5M12 11.5l6 5" {...STROKE} />
+    </IconBase>
+  );
+}
+
 export function EvaluationIcon({ className }: { className?: string }) {
   return (
     <IconBase className={className}>

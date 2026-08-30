@@ -1,0 +1,67 @@
+# The declarative equivalent of detect/scope.py's real Layer 2 rule set,
+# in the exact order enforce_scope's own _check_binding + _check_transaction_scope
+# fire them, so a compiled evaluation of this document reproduces
+# enforce_scope's real `reasons` tuple byte-for-byte (see
+# tests/test_policy_behavioral_identity.py, checked against the full
+# generated corpus, and docs/adr/0013-policy-as-code.md).
+#
+# NO_MANDATE_PRESENTED is not a rule here: it is a precondition checked
+# before any rule in this document runs at all (no mandate object exists to
+# compare fields against), exactly mirroring enforce_scope's own early
+# return when `signed is None`.
+policy_version: "1.0.0"
+rules:
+  - name: mandate_id_mismatch
+    reason: mandate_id_mismatch
+    check: equals
+    left: trace.mandate_id
+    right: mandate.mandate_id
+
+  - name: agent_binding_mismatch
+    reason: agent_binding_mismatch
+    check: equals
+    left: trace.agent_id
+    right: mandate.agent_id
+
+  - name: user_binding_mismatch
+    reason: user_binding_mismatch
+    check: equals
+    left: trace.user_id
+    right: mandate.user_id
+
+  - name: amount_over_ceiling
+    reason: amount_over_ceiling
+    check: compare
+    left: trace.amount
+    right: mandate.scope.max_amount
+
+  - name: currency_mismatch
+    reason: currency_mismatch
+    check: equals
+    left: trace.currency
+    right: mandate.scope.currency
+
+  - name: merchant_category_not_allowed
+    reason: merchant_category_not_allowed
+    check: membership
+    value: trace.merchant_category
+    field_set: mandate.scope.allowed_merchant_categories
+
+  - name: item_category_not_allowed
+    reason: item_category_not_allowed
+    check: membership
+    value: trace.item_category
+    field_set: mandate.scope.allowed_item_categories
+
+  - name: merchant_not_allowed
+    reason: merchant_not_allowed
+    check: membership
+    value: trace.merchant_id
+    field_set: mandate.scope.allowed_merchant_ids
+
+  - name: outside_time_window
+    reason: outside_time_window
+    check: in_range
+    value: trace.started_at
+    low: mandate.scope.valid_from
+    high: mandate.scope.valid_until

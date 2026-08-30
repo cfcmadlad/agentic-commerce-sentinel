@@ -1,0 +1,976 @@
+[
+  {
+    "key": "valid_delegation",
+    "label": "Valid delegation",
+    "description": "A child mandate whose ceiling and window both fit inside its parent's.",
+    "parent_request": {
+      "trace": {
+        "session_id": "e10cbb25-1319-55ce-853a-89d70e1e0066",
+        "agent_id": "demo-agent-00",
+        "user_id": "demo-user-delegation-00",
+        "mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+        "merchant_id": "freshmart-01",
+        "merchant_category": "grocery",
+        "item_category": "packaged_food",
+        "amount": "1200.00",
+        "currency": "INR",
+        "events": [
+          {
+            "event_type": "intent_captured",
+            "timestamp": "2026-02-01T09:00:00Z",
+            "payload": {}
+          },
+          {
+            "event_type": "mandate_presented",
+            "timestamp": "2026-02-01T09:00:18Z",
+            "payload": {}
+          },
+          {
+            "event_type": "catalog_browse",
+            "timestamp": "2026-02-01T09:00:42Z",
+            "payload": {}
+          },
+          {
+            "event_type": "cart_build",
+            "timestamp": "2026-02-01T09:01:03Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_attempt",
+            "timestamp": "2026-02-01T09:01:29Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_result",
+            "timestamp": "2026-02-01T09:01:44Z",
+            "payload": {}
+          }
+        ],
+        "started_at": "2026-02-01T09:00:00Z",
+        "completed_at": "2026-02-01T09:01:44Z"
+      },
+      "signed_mandate": {
+        "mandate": {
+          "mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+          "schema_version": "1.0",
+          "agent_id": "demo-agent-00",
+          "user_id": "demo-user-delegation-00",
+          "parent_mandate_id": null,
+          "issued_at": "2026-02-01T07:00:00Z",
+          "expires_at": "2026-02-01T16:00:00Z",
+          "nonce": "c7872b403de65d409a3200840323ebe2",
+          "scope": {
+            "max_amount": "5000",
+            "currency": "INR",
+            "allowed_merchant_ids": null,
+            "allowed_merchant_categories": [
+              "grocery"
+            ],
+            "allowed_item_categories": [
+              "packaged_food"
+            ],
+            "valid_from": "2026-02-01T07:00:00Z",
+            "valid_until": "2026-02-01T15:00:00Z",
+            "max_transaction_count": 10
+          },
+          "signer_key_id": "ed25519:5584637858cfc677"
+        },
+        "signature": "pGY7bpu/gkZhU3FmaiHRODO27TOLJnbDSEd+ol/0+YXCaELRm5jdJosoNkDzuncDtB/ZDlM6XoNYVAsQ0TXBCw=="
+      }
+    },
+    "child_requests": [
+      {
+        "trace": {
+          "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
+          "agent_id": "demo-agent-00",
+          "user_id": "demo-user-delegation-00",
+          "mandate_id": "acfbe340-af3d-537c-838d-4226b0d76de7",
+          "merchant_id": "freshmart-01",
+          "merchant_category": "grocery",
+          "item_category": "packaged_food",
+          "amount": "1500.00",
+          "currency": "INR",
+          "events": [
+            {
+              "event_type": "intent_captured",
+              "timestamp": "2026-02-01T09:00:00Z",
+              "payload": {}
+            },
+            {
+              "event_type": "mandate_presented",
+              "timestamp": "2026-02-01T09:00:18Z",
+              "payload": {}
+            },
+            {
+              "event_type": "catalog_browse",
+              "timestamp": "2026-02-01T09:00:42Z",
+              "payload": {}
+            },
+            {
+              "event_type": "cart_build",
+              "timestamp": "2026-02-01T09:01:03Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_attempt",
+              "timestamp": "2026-02-01T09:01:29Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_result",
+              "timestamp": "2026-02-01T09:01:44Z",
+              "payload": {}
+            }
+          ],
+          "started_at": "2026-02-01T09:00:00Z",
+          "completed_at": "2026-02-01T09:01:44Z"
+        },
+        "signed_mandate": {
+          "mandate": {
+            "mandate_id": "acfbe340-af3d-537c-838d-4226b0d76de7",
+            "schema_version": "1.0",
+            "agent_id": "demo-agent-00",
+            "user_id": "demo-user-delegation-00",
+            "parent_mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+            "issued_at": "2026-02-01T07:00:00Z",
+            "expires_at": "2026-02-01T16:00:00Z",
+            "nonce": "8ad2e73349835f97bea791fcd944cbb8",
+            "scope": {
+              "max_amount": "2000",
+              "currency": "INR",
+              "allowed_merchant_ids": null,
+              "allowed_merchant_categories": [
+                "grocery"
+              ],
+              "allowed_item_categories": [
+                "packaged_food"
+              ],
+              "valid_from": "2026-02-01T07:00:00Z",
+              "valid_until": "2026-02-01T15:00:00Z",
+              "max_transaction_count": 10
+            },
+            "signer_key_id": "ed25519:5584637858cfc677"
+          },
+          "signature": "mVYMdxzrCyadq2Co0TA5vXAjtfuZEj9mKsx8GchSlO7yj7+LiLHbPgZrZ4a5yGeLNXwHu4A45zHICwSNTIM7DA=="
+        }
+      }
+    ],
+    "focus_mandate_id": "acfbe340-af3d-537c-838d-4226b0d76de7",
+    "chain": {
+      "nodes": [
+        {
+          "mandate_id": "acfbe340-af3d-537c-838d-4226b0d76de7",
+          "agent_id": "demo-agent-00",
+          "parent_mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+          "depth": 0,
+          "is_root": false,
+          "in_bounds": true,
+          "reasons": [],
+          "unresolvable_parent": false
+        },
+        {
+          "mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+          "agent_id": "demo-agent-00",
+          "parent_mandate_id": null,
+          "depth": 1,
+          "is_root": true,
+          "in_bounds": null,
+          "reasons": [],
+          "unresolvable_parent": false
+        }
+      ],
+      "edges": [
+        {
+          "child_mandate_id": "acfbe340-af3d-537c-838d-4226b0d76de7",
+          "parent_mandate_id": "86c4ce8a-9e39-5f2f-aae9-e8a7838c8b3c",
+          "violates": false
+        }
+      ],
+      "chain_broken": false,
+      "chain_broken_reason": null
+    },
+    "focus_decision": {
+      "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
+      "baseline": {
+        "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
+        "blocked": false,
+        "verification_reasons": [],
+        "scope_reasons": [],
+        "fired_rules": []
+      },
+      "ensemble": {
+        "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
+        "blocked": false,
+        "source": "allowed",
+        "behavioral_score": 1.6841791102936045e-05,
+        "rules_fired": []
+      },
+      "attribution": [
+        {
+          "feature": "agent_prior_session_count",
+          "shap_value": -0.14387794962343128
+        },
+        {
+          "feature": "amount_over_agent_prior_mean",
+          "shap_value": 0.018092193990708536
+        },
+        {
+          "feature": "day_of_week",
+          "shap_value": 0.21201873810774446
+        },
+        {
+          "feature": "duration_seconds",
+          "shap_value": -0.055853500782401685
+        },
+        {
+          "feature": "event_count",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "event_gap_cv",
+          "shap_value": 0.10663315752102212
+        },
+        {
+          "feature": "has_cart_build",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_catalog_browse",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_mandate_presented",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "hour_of_day",
+          "shap_value": -0.06230709755265042
+        },
+        {
+          "feature": "hours_since_agent_last_session",
+          "shap_value": 0.38352074606121267
+        },
+        {
+          "feature": "hours_since_mandate_last_use",
+          "shap_value": -0.16092280066576367
+        },
+        {
+          "feature": "log_amount",
+          "shap_value": -0.021122830411756388
+        },
+        {
+          "feature": "mandate_prior_use_count",
+          "shap_value": -0.134688158402808
+        },
+        {
+          "feature": "max_event_gap_seconds",
+          "shap_value": -0.0436444358376869
+        },
+        {
+          "feature": "mean_event_gap_seconds",
+          "shap_value": 0.001530142344526746
+        },
+        {
+          "feature": "min_event_gap_seconds",
+          "shap_value": -0.0003411073266429846
+        },
+        {
+          "feature": "presented_a_mandate",
+          "shap_value": 0.0
+        }
+      ],
+      "narrative": {
+        "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
+        "verdict_summary": "allowed",
+        "narrative": "The decision to allow the session was based on the fact that no rules fired during the evaluation. The behavioral model produced a score of 0.0000, which is below the operating threshold of 0.0251, so the risk was considered acceptable. Although features such as hours_since_agent_last_session and day_of_week contributed positively toward risk, the overall score remained under the threshold, resulting in an allowed verdict.",
+        "rule_citations": [],
+        "feature_citations": [
+          "hours_since_agent_last_session",
+          "day_of_week",
+          "hours_since_mandate_last_use",
+          "agent_prior_session_count",
+          "mandate_prior_use_count"
+        ],
+        "model": "openai/gpt-oss-120b",
+        "generated_at": "2026-08-30T13:44:24.369548Z"
+      },
+      "counterfactual": null
+    }
+  },
+  {
+    "key": "over_scoped_child",
+    "label": "Over-scoped child",
+    "description": "A delegated mandate whose own ceiling (5000) exceeds its parent's (1000). The transaction below stays within the CHILD's own ceiling, so Layers 1-3 allow it -- exactly the gap docs/adr/0003 and docs/adr/0004 already disclosed, made visible here because this view checks Layer 2.5 directly.",
+    "parent_request": {
+      "trace": {
+        "session_id": "444c973f-9c46-51a0-9c2b-e0ddebce11ae",
+        "agent_id": "demo-agent-01",
+        "user_id": "demo-user-delegation-01",
+        "mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+        "merchant_id": "freshmart-01",
+        "merchant_category": "grocery",
+        "item_category": "packaged_food",
+        "amount": "400.00",
+        "currency": "INR",
+        "events": [
+          {
+            "event_type": "intent_captured",
+            "timestamp": "2026-02-01T09:00:00Z",
+            "payload": {}
+          },
+          {
+            "event_type": "mandate_presented",
+            "timestamp": "2026-02-01T09:00:18Z",
+            "payload": {}
+          },
+          {
+            "event_type": "catalog_browse",
+            "timestamp": "2026-02-01T09:00:42Z",
+            "payload": {}
+          },
+          {
+            "event_type": "cart_build",
+            "timestamp": "2026-02-01T09:01:03Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_attempt",
+            "timestamp": "2026-02-01T09:01:29Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_result",
+            "timestamp": "2026-02-01T09:01:44Z",
+            "payload": {}
+          }
+        ],
+        "started_at": "2026-02-01T09:00:00Z",
+        "completed_at": "2026-02-01T09:01:44Z"
+      },
+      "signed_mandate": {
+        "mandate": {
+          "mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+          "schema_version": "1.0",
+          "agent_id": "demo-agent-01",
+          "user_id": "demo-user-delegation-01",
+          "parent_mandate_id": null,
+          "issued_at": "2026-02-01T07:00:00Z",
+          "expires_at": "2026-02-01T16:00:00Z",
+          "nonce": "16a916cd5d8d5235bbfe06996ec2dfcc",
+          "scope": {
+            "max_amount": "1000",
+            "currency": "INR",
+            "allowed_merchant_ids": null,
+            "allowed_merchant_categories": [
+              "grocery"
+            ],
+            "allowed_item_categories": [
+              "packaged_food"
+            ],
+            "valid_from": "2026-02-01T07:00:00Z",
+            "valid_until": "2026-02-01T15:00:00Z",
+            "max_transaction_count": 10
+          },
+          "signer_key_id": "ed25519:9d26aecc6e73a1db"
+        },
+        "signature": "Hq7orgs5yyOrj4+j5M3rkPWlKF0fFm7C6HF910mDcfa5wMKpUnNxp3AR4yj3oKQhZkPPS9YNNySw7KmTRJU8CA=="
+      }
+    },
+    "child_requests": [
+      {
+        "trace": {
+          "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
+          "agent_id": "demo-agent-01",
+          "user_id": "demo-user-delegation-01",
+          "mandate_id": "26330eff-3d05-5c62-97f7-3c3ddf2bbaf0",
+          "merchant_id": "freshmart-01",
+          "merchant_category": "grocery",
+          "item_category": "packaged_food",
+          "amount": "3000.00",
+          "currency": "INR",
+          "events": [
+            {
+              "event_type": "intent_captured",
+              "timestamp": "2026-02-01T09:00:00Z",
+              "payload": {}
+            },
+            {
+              "event_type": "mandate_presented",
+              "timestamp": "2026-02-01T09:00:18Z",
+              "payload": {}
+            },
+            {
+              "event_type": "catalog_browse",
+              "timestamp": "2026-02-01T09:00:42Z",
+              "payload": {}
+            },
+            {
+              "event_type": "cart_build",
+              "timestamp": "2026-02-01T09:01:03Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_attempt",
+              "timestamp": "2026-02-01T09:01:29Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_result",
+              "timestamp": "2026-02-01T09:01:44Z",
+              "payload": {}
+            }
+          ],
+          "started_at": "2026-02-01T09:00:00Z",
+          "completed_at": "2026-02-01T09:01:44Z"
+        },
+        "signed_mandate": {
+          "mandate": {
+            "mandate_id": "26330eff-3d05-5c62-97f7-3c3ddf2bbaf0",
+            "schema_version": "1.0",
+            "agent_id": "demo-agent-01",
+            "user_id": "demo-user-delegation-01",
+            "parent_mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+            "issued_at": "2026-02-01T07:00:00Z",
+            "expires_at": "2026-02-01T16:00:00Z",
+            "nonce": "710364f40d28591580f8060b720f5fe6",
+            "scope": {
+              "max_amount": "5000",
+              "currency": "INR",
+              "allowed_merchant_ids": null,
+              "allowed_merchant_categories": [
+                "grocery"
+              ],
+              "allowed_item_categories": [
+                "packaged_food"
+              ],
+              "valid_from": "2026-02-01T07:00:00Z",
+              "valid_until": "2026-02-01T15:00:00Z",
+              "max_transaction_count": 10
+            },
+            "signer_key_id": "ed25519:9d26aecc6e73a1db"
+          },
+          "signature": "uuEbrW5C2/Wd0yoe0JPfKvOOtAE8X3fnIH0oxvV6fRwahQr793cpDJ0EG1qYROjFydU7d5xFFUg56eK0xSwwAw=="
+        }
+      }
+    ],
+    "focus_mandate_id": "26330eff-3d05-5c62-97f7-3c3ddf2bbaf0",
+    "chain": {
+      "nodes": [
+        {
+          "mandate_id": "26330eff-3d05-5c62-97f7-3c3ddf2bbaf0",
+          "agent_id": "demo-agent-01",
+          "parent_mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+          "depth": 0,
+          "is_root": false,
+          "in_bounds": false,
+          "reasons": [
+            "scope_amount_exceeds_parent",
+            "sibling_cap_exceeds_parent_remaining"
+          ],
+          "unresolvable_parent": false
+        },
+        {
+          "mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+          "agent_id": "demo-agent-01",
+          "parent_mandate_id": null,
+          "depth": 1,
+          "is_root": true,
+          "in_bounds": null,
+          "reasons": [],
+          "unresolvable_parent": false
+        }
+      ],
+      "edges": [
+        {
+          "child_mandate_id": "26330eff-3d05-5c62-97f7-3c3ddf2bbaf0",
+          "parent_mandate_id": "d8c8a2f5-47f8-5a4a-b53b-f20d543f7318",
+          "violates": true
+        }
+      ],
+      "chain_broken": false,
+      "chain_broken_reason": null
+    },
+    "focus_decision": {
+      "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
+      "baseline": {
+        "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
+        "blocked": false,
+        "verification_reasons": [],
+        "scope_reasons": [],
+        "fired_rules": []
+      },
+      "ensemble": {
+        "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
+        "blocked": false,
+        "source": "allowed",
+        "behavioral_score": 1.7237533559476428e-05,
+        "rules_fired": []
+      },
+      "attribution": [
+        {
+          "feature": "agent_prior_session_count",
+          "shap_value": -0.13416202265353683
+        },
+        {
+          "feature": "amount_over_agent_prior_mean",
+          "shap_value": 0.038405688675448586
+        },
+        {
+          "feature": "day_of_week",
+          "shap_value": 0.21201873810774446
+        },
+        {
+          "feature": "duration_seconds",
+          "shap_value": -0.05593519997359771
+        },
+        {
+          "feature": "event_count",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "event_gap_cv",
+          "shap_value": 0.1073761011174767
+        },
+        {
+          "feature": "has_cart_build",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_catalog_browse",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_mandate_presented",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "hour_of_day",
+          "shap_value": -0.059997725534541586
+        },
+        {
+          "feature": "hours_since_agent_last_session",
+          "shap_value": 0.3828535347955496
+        },
+        {
+          "feature": "hours_since_mandate_last_use",
+          "shap_value": -0.16271349998292386
+        },
+        {
+          "feature": "log_amount",
+          "shap_value": -0.02721019956805915
+        },
+        {
+          "feature": "mandate_prior_use_count",
+          "shap_value": -0.1367032053563135
+        },
+        {
+          "feature": "max_event_gap_seconds",
+          "shap_value": -0.04285792465883535
+        },
+        {
+          "feature": "mean_event_gap_seconds",
+          "shap_value": 0.001530142344526746
+        },
+        {
+          "feature": "min_event_gap_seconds",
+          "shap_value": -0.0003411073266429846
+        },
+        {
+          "feature": "presented_a_mandate",
+          "shap_value": 0.0
+        }
+      ],
+      "narrative": {
+        "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
+        "verdict_summary": "allowed",
+        "narrative": "No rule fired for this session, and the calibrated behavioral model produced a score of\u202f0.0000, which is below the operating threshold of\u202f0.0251. The top contributing features listed \u2013\u202fhours_since_agent_last_session, day_of_week, hours_since_mandate_last_use, mandate_prior_use_count, and agent_prior_session_count \u2013 balanced each other out, leaving the overall risk below the threshold. Because no check flagged the activity and the behavioral score was under the limit, the session was allowed.",
+        "rule_citations": [],
+        "feature_citations": [
+          "hours_since_agent_last_session",
+          "day_of_week",
+          "hours_since_mandate_last_use",
+          "mandate_prior_use_count",
+          "agent_prior_session_count"
+        ],
+        "model": "openai/gpt-oss-120b",
+        "generated_at": "2026-08-30T13:44:27.359481Z"
+      },
+      "counterfactual": null
+    }
+  },
+  {
+    "key": "sibling_fanout",
+    "label": "Sibling fan-out",
+    "description": "Two siblings, 700 and 600, each individually under the parent's 1000 ceiling but 700+600 together exceeding it. The second sibling's own transaction (450) still fits its own 600 ceiling, so Layers 1-3 allow it -- only the chain view's sibling-cap check (Layer 2.5) sees the fan-out.",
+    "parent_request": {
+      "trace": {
+        "session_id": "96b518ee-9bbb-5b6d-a6b2-853c0cb02b37",
+        "agent_id": "demo-agent-02",
+        "user_id": "demo-user-delegation-02",
+        "mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+        "merchant_id": "freshmart-01",
+        "merchant_category": "grocery",
+        "item_category": "packaged_food",
+        "amount": "300.00",
+        "currency": "INR",
+        "events": [
+          {
+            "event_type": "intent_captured",
+            "timestamp": "2026-02-01T09:00:00Z",
+            "payload": {}
+          },
+          {
+            "event_type": "mandate_presented",
+            "timestamp": "2026-02-01T09:00:18Z",
+            "payload": {}
+          },
+          {
+            "event_type": "catalog_browse",
+            "timestamp": "2026-02-01T09:00:42Z",
+            "payload": {}
+          },
+          {
+            "event_type": "cart_build",
+            "timestamp": "2026-02-01T09:01:03Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_attempt",
+            "timestamp": "2026-02-01T09:01:29Z",
+            "payload": {}
+          },
+          {
+            "event_type": "payment_result",
+            "timestamp": "2026-02-01T09:01:44Z",
+            "payload": {}
+          }
+        ],
+        "started_at": "2026-02-01T09:00:00Z",
+        "completed_at": "2026-02-01T09:01:44Z"
+      },
+      "signed_mandate": {
+        "mandate": {
+          "mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+          "schema_version": "1.0",
+          "agent_id": "demo-agent-02",
+          "user_id": "demo-user-delegation-02",
+          "parent_mandate_id": null,
+          "issued_at": "2026-02-01T07:00:00Z",
+          "expires_at": "2026-02-01T16:00:00Z",
+          "nonce": "5e0455dcc1655d748d0b43d387c0b81a",
+          "scope": {
+            "max_amount": "1000",
+            "currency": "INR",
+            "allowed_merchant_ids": null,
+            "allowed_merchant_categories": [
+              "grocery"
+            ],
+            "allowed_item_categories": [
+              "packaged_food"
+            ],
+            "valid_from": "2026-02-01T07:00:00Z",
+            "valid_until": "2026-02-01T15:00:00Z",
+            "max_transaction_count": 10
+          },
+          "signer_key_id": "ed25519:4536e2aecaef214d"
+        },
+        "signature": "TFRNsguWkOGmDmbs4/t07qYujBgJuZigbiKoGgOiUsIZ9IMfb7AiHnjOPB544u0PeYQKtMaKCbC2YKgFOquIAw=="
+      }
+    },
+    "child_requests": [
+      {
+        "trace": {
+          "session_id": "c3c3c3c3-3333-4333-8333-333333333333",
+          "agent_id": "demo-agent-02",
+          "user_id": "demo-user-delegation-02",
+          "mandate_id": "ac27c66e-3356-5dc9-852e-3e2c50856e06",
+          "merchant_id": "freshmart-01",
+          "merchant_category": "grocery",
+          "item_category": "packaged_food",
+          "amount": "500.00",
+          "currency": "INR",
+          "events": [
+            {
+              "event_type": "intent_captured",
+              "timestamp": "2026-02-01T09:00:00Z",
+              "payload": {}
+            },
+            {
+              "event_type": "mandate_presented",
+              "timestamp": "2026-02-01T09:00:18Z",
+              "payload": {}
+            },
+            {
+              "event_type": "catalog_browse",
+              "timestamp": "2026-02-01T09:00:42Z",
+              "payload": {}
+            },
+            {
+              "event_type": "cart_build",
+              "timestamp": "2026-02-01T09:01:03Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_attempt",
+              "timestamp": "2026-02-01T09:01:29Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_result",
+              "timestamp": "2026-02-01T09:01:44Z",
+              "payload": {}
+            }
+          ],
+          "started_at": "2026-02-01T09:00:00Z",
+          "completed_at": "2026-02-01T09:01:44Z"
+        },
+        "signed_mandate": {
+          "mandate": {
+            "mandate_id": "ac27c66e-3356-5dc9-852e-3e2c50856e06",
+            "schema_version": "1.0",
+            "agent_id": "demo-agent-02",
+            "user_id": "demo-user-delegation-02",
+            "parent_mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+            "issued_at": "2026-02-01T07:00:00Z",
+            "expires_at": "2026-02-01T16:00:00Z",
+            "nonce": "c87e61d4829458a890743b71e1d38fc4",
+            "scope": {
+              "max_amount": "700",
+              "currency": "INR",
+              "allowed_merchant_ids": null,
+              "allowed_merchant_categories": [
+                "grocery"
+              ],
+              "allowed_item_categories": [
+                "packaged_food"
+              ],
+              "valid_from": "2026-02-01T07:00:00Z",
+              "valid_until": "2026-02-01T15:00:00Z",
+              "max_transaction_count": 10
+            },
+            "signer_key_id": "ed25519:4536e2aecaef214d"
+          },
+          "signature": "23QHvSqhYmtJmGKY3CxKVUEPuW79sIH0l6IFL4dkGh/oo54Nz/oVzkKjvslmcvCn+9CTUYWrcYTe+uDXiXc4Cw=="
+        }
+      },
+      {
+        "trace": {
+          "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
+          "agent_id": "demo-agent-02",
+          "user_id": "demo-user-delegation-02",
+          "mandate_id": "c1d6b281-0db9-526e-8bde-c26485d80dbf",
+          "merchant_id": "freshmart-01",
+          "merchant_category": "grocery",
+          "item_category": "packaged_food",
+          "amount": "450.00",
+          "currency": "INR",
+          "events": [
+            {
+              "event_type": "intent_captured",
+              "timestamp": "2026-02-01T09:00:00Z",
+              "payload": {}
+            },
+            {
+              "event_type": "mandate_presented",
+              "timestamp": "2026-02-01T09:00:18Z",
+              "payload": {}
+            },
+            {
+              "event_type": "catalog_browse",
+              "timestamp": "2026-02-01T09:00:42Z",
+              "payload": {}
+            },
+            {
+              "event_type": "cart_build",
+              "timestamp": "2026-02-01T09:01:03Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_attempt",
+              "timestamp": "2026-02-01T09:01:29Z",
+              "payload": {}
+            },
+            {
+              "event_type": "payment_result",
+              "timestamp": "2026-02-01T09:01:44Z",
+              "payload": {}
+            }
+          ],
+          "started_at": "2026-02-01T09:00:00Z",
+          "completed_at": "2026-02-01T09:01:44Z"
+        },
+        "signed_mandate": {
+          "mandate": {
+            "mandate_id": "c1d6b281-0db9-526e-8bde-c26485d80dbf",
+            "schema_version": "1.0",
+            "agent_id": "demo-agent-02",
+            "user_id": "demo-user-delegation-02",
+            "parent_mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+            "issued_at": "2026-02-01T07:00:00Z",
+            "expires_at": "2026-02-01T16:00:00Z",
+            "nonce": "c9a0619379225849882b86a6e8f38eb9",
+            "scope": {
+              "max_amount": "600",
+              "currency": "INR",
+              "allowed_merchant_ids": null,
+              "allowed_merchant_categories": [
+                "grocery"
+              ],
+              "allowed_item_categories": [
+                "packaged_food"
+              ],
+              "valid_from": "2026-02-01T07:00:00Z",
+              "valid_until": "2026-02-01T15:00:00Z",
+              "max_transaction_count": 10
+            },
+            "signer_key_id": "ed25519:4536e2aecaef214d"
+          },
+          "signature": "srg881d/GBuEpGk42cgF+9qBJzB56s1Yvx4bDNGBqn/CYc2goW7Ctlt8Eh20jgMFH/tNQSdAeoxWWMSBeU2ECw=="
+        }
+      }
+    ],
+    "focus_mandate_id": "c1d6b281-0db9-526e-8bde-c26485d80dbf",
+    "chain": {
+      "nodes": [
+        {
+          "mandate_id": "c1d6b281-0db9-526e-8bde-c26485d80dbf",
+          "agent_id": "demo-agent-02",
+          "parent_mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+          "depth": 0,
+          "is_root": false,
+          "in_bounds": false,
+          "reasons": [
+            "sibling_cap_exceeds_parent_remaining"
+          ],
+          "unresolvable_parent": false
+        },
+        {
+          "mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+          "agent_id": "demo-agent-02",
+          "parent_mandate_id": null,
+          "depth": 1,
+          "is_root": true,
+          "in_bounds": null,
+          "reasons": [],
+          "unresolvable_parent": false
+        }
+      ],
+      "edges": [
+        {
+          "child_mandate_id": "c1d6b281-0db9-526e-8bde-c26485d80dbf",
+          "parent_mandate_id": "2dd1b12b-99bc-5206-be73-deeae6370ef2",
+          "violates": true
+        }
+      ],
+      "chain_broken": false,
+      "chain_broken_reason": null
+    },
+    "focus_decision": {
+      "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
+      "baseline": {
+        "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
+        "blocked": false,
+        "verification_reasons": [],
+        "scope_reasons": [],
+        "fired_rules": []
+      },
+      "ensemble": {
+        "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
+        "blocked": false,
+        "source": "allowed",
+        "behavioral_score": 1.703810958698116e-05,
+        "rules_fired": []
+      },
+      "attribution": [
+        {
+          "feature": "agent_prior_session_count",
+          "shap_value": -0.13817781875199428
+        },
+        {
+          "feature": "amount_over_agent_prior_mean",
+          "shap_value": 0.0179892130509484
+        },
+        {
+          "feature": "day_of_week",
+          "shap_value": 0.20306112507802
+        },
+        {
+          "feature": "duration_seconds",
+          "shap_value": -0.055055127736057335
+        },
+        {
+          "feature": "event_count",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "event_gap_cv",
+          "shap_value": 0.10662668891299783
+        },
+        {
+          "feature": "has_cart_build",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_catalog_browse",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "has_mandate_presented",
+          "shap_value": 0.0
+        },
+        {
+          "feature": "hour_of_day",
+          "shap_value": -0.06302774772534929
+        },
+        {
+          "feature": "hours_since_agent_last_session",
+          "shap_value": 0.36371865206398224
+        },
+        {
+          "feature": "hours_since_mandate_last_use",
+          "shap_value": -0.1608223354230536
+        },
+        {
+          "feature": "log_amount",
+          "shap_value": -0.008835427772346569
+        },
+        {
+          "feature": "mandate_prior_use_count",
+          "shap_value": -0.13480450540312325
+        },
+        {
+          "feature": "max_event_gap_seconds",
+          "shap_value": -0.029110427149385075
+        },
+        {
+          "feature": "mean_event_gap_seconds",
+          "shap_value": 0.001530142344526746
+        },
+        {
+          "feature": "min_event_gap_seconds",
+          "shap_value": 0.007534074580281031
+        },
+        {
+          "feature": "presented_a_mandate",
+          "shap_value": 0.0
+        }
+      ],
+      "narrative": {
+        "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
+        "verdict_summary": "allowed",
+        "narrative": "The session was allowed because no deterministic rules fired. The behavioral model produced a score of 0.0000, which is below the operating threshold of 0.0251. Although the features\u202fhours_since_agent_last_session\u202f(+0.3637) and\u202fday_of_week\u202f(+0.2031) pushed the score upward, the overall result remained low, leading to an allowed decision.",
+        "rule_citations": [],
+        "feature_citations": [
+          "hours_since_agent_last_session",
+          "day_of_week",
+          "hours_since_mandate_last_use",
+          "agent_prior_session_count",
+          "mandate_prior_use_count"
+        ],
+        "model": "openai/gpt-oss-120b",
+        "generated_at": "2026-08-30T13:44:30.869657Z"
+      },
+      "counterfactual": null
+    }
+  }
+]

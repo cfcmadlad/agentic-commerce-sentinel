@@ -24,7 +24,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -35,23 +35,47 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from common.schema import SessionTrace
+from counterfactual.behavioral import BehavioralCounterfactual, behavioral_counterfactual
+from counterfactual.deterministic import Counterfactual as DeterministicCounterfactual
+from counterfactual.deterministic import scope_counterfactual, verification_counterfactual
 from detect.attribution import compute_attribution
 from detect.baseline import BaselineDecision
-from detect.ensemble import ensemble_decide
+from detect.ensemble import SOURCE_BEHAVIORAL, SOURCE_RULES, EnsembleDecision, ensemble_decide
 from detect.scope import enforce_scope
+from escalation.queue import EscalationNotFoundError, HumanActionRequiredError, InvalidTransitionError
+from escalation.schema import EscalationStatus, ResolutionDecision
 from features.session import feature_names
-from mandate.verification import verify_mandate
+from mandate.verification import KeyRevocation, KeyRevocationReason, verify_mandate
 from reasoning.narrate import build_narration_input, narrate
-from reasoning.schema import AuditRecord
+from reasoning.schema import AuditRecord, Counterfactual, CounterfactualEdit
+from service.delegation_chain import build_delegation_chain
 from service.demo_seed import seed_demo_history
-from service.middleware import RateLimitMiddleware, RequestLoggingMiddleware
+from service.middleware import (
+    DEFAULT_MAX_REQUESTS_PER_WINDOW,
+    DEFAULT_WINDOW_SECONDS,
+    RateLimitMiddleware,
+    RequestLoggingMiddleware,
+)
 from service.schemas import (
     AttributionRowOut,
+    CircuitBreakerResetRequest,
+    CircuitBreakerStatusOut,
+    CounterfactualOut,
     DecideRequest,
+    DelegationChainOut,
+    EscalationOut,
+    KeyRevocationOut,
+    ResolveEscalationRequest,
+    ReviewEscalationRequest,
+    RevokeKeyRequest,
+    RotateKeyRequest,
     SessionDecisionResponse,
     attribution_row_to_out,
     baseline_to_out,
+    counterfactual_to_out,
     ensemble_to_out,
+    escalation_to_out,
     narration_to_out,
 )
 from service.state import AppState, build_app_state
@@ -65,6 +89,29 @@ NARRATION_UNAVAILABLE_TEXT = (
 )
 NARRATION_UNAVAILABLE_MODEL = "none (narration disabled)"
 
+NARRATION_FAILED_TEXT = (
+    "Narration unavailable: the Layer 4 call failed (provider error, rate limit, or "
+    "timeout). The verdict above is unaffected -- narration is always best-effort and "
+    "never a precondition for a decision."
+)
+NARRATION_FAILED_MODEL = "none (narration call failed)"
+
+# Not one of detect.ensemble's SOURCE_* constants -- the circuit breaker is
+# a service-layer gate on top of the four-layer pipeline, not a fifth
+# detection layer, and `detect/ensemble.py` is deliberately never touched
+# for an addition like this (see the module's own docstring on why the
+# ensemble's combination rule stays narrow). `EnsembleDecision.source` and
+# `EnsembleDecisionOut.source` are both plain `str` fields, so this needs
+# no change to either type.
+SOURCE_CIRCUIT_BREAKER = "circuit_breaker"
+CIRCUIT_BREAKER_RULE_NAME = "circuit_breaker:agent_suspended"
+CIRCUIT_BREAKER_NARRATIVE_TEMPLATE = (
+    "This session was blocked before Layers 1-3 ran: agent {agent_id} is currently suspended by the "
+    "circuit breaker after accumulating too many escalated verdicts within its rolling window. "
+    "Suspension only lifts via an explicit human review action at POST "
+    "/agents/{agent_id}/circuit-breaker/reset -- never automatically."
+)
+
 _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
@@ -76,6 +123,24 @@ def _cors_origins() -> list[str]:
     """
     raw = os.environ.get("SENTINEL_CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+def _rate_limit_config() -> tuple[int, float]:
+    """Reads the rate limit from the environment, with `RateLimitMiddleware`'s own documented defaults.
+
+    Same pattern as `_cors_origins` -- an operational knob a real
+    deployment might reasonably want to tune, not only a way for
+    `tests/conftest.py` to raise the limit so a large, ever-growing test
+    suite sharing one session-scoped `TestClient` (see `tests/test_service
+    .py`'s own module docstring on why it is session-scoped) does not trip
+    the same rate limiter a real client would.
+
+    Returns:
+        `(max_requests, window_seconds)`.
+    """
+    max_requests = int(os.environ.get("SENTINEL_RATE_LIMIT_MAX_REQUESTS", DEFAULT_MAX_REQUESTS_PER_WINDOW))
+    window_seconds = float(os.environ.get("SENTINEL_RATE_LIMIT_WINDOW_SECONDS", DEFAULT_WINDOW_SECONDS))
+    return max_requests, window_seconds
 
 
 @asynccontextmanager
@@ -100,7 +165,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(RateLimitMiddleware)
+_rate_limit_max_requests, _rate_limit_window_seconds = _rate_limit_config()
+app.add_middleware(
+    RateLimitMiddleware, max_requests=_rate_limit_max_requests, window_seconds=_rate_limit_window_seconds
+)
 app.add_middleware(RequestLoggingMiddleware)
 
 
@@ -213,6 +281,209 @@ def register_agent(payload: RegisterAgentRequest, state: AppState = Depends(get_
     return RegisterAgentResponse(agent_id=payload.agent_id, key_id=payload.key_id, registered=True)
 
 
+def _revocation_to_out(revocation: KeyRevocation) -> KeyRevocationOut:
+    """Renders a `mandate.verification.KeyRevocation` as its wire form.
+
+    Args:
+        revocation: The revocation to render.
+
+    Returns:
+        The wire-form model.
+    """
+    return KeyRevocationOut(
+        agent_id=revocation.agent_id,
+        key_id=revocation.key_id,
+        reason=revocation.reason.value,
+        revoked_by=revocation.revoked_by,
+        revoked_at=revocation.revoked_at,
+        effective_at=revocation.effective_at,
+    )
+
+
+@app.post("/agents/{agent_id}/keys/{key_id}/revoke", response_model=KeyRevocationOut)
+def revoke_key(
+    agent_id: str, key_id: str, payload: RevokeKeyRequest, state: AppState = Depends(get_state)
+) -> KeyRevocationOut:
+    """Revokes one of an agent's registered keys, effective immediately. Always a human action.
+
+    Args:
+        agent_id: The agent whose key is being revoked.
+        key_id: The key fingerprint to revoke.
+        payload: The structured reason and the revoking actor.
+        state: The shared application state.
+
+    Returns:
+        The recorded revocation.
+
+    Raises:
+        HTTPException: 422, if `payload.reason` is not a recognized
+            `KeyRevocationReason` value.
+    """
+    try:
+        reason = KeyRevocationReason(payload.reason)
+    except ValueError as error:
+        valid = [r.value for r in KeyRevocationReason]
+        detail = f"invalid reason {payload.reason!r}; must be one of {valid}"
+        raise HTTPException(status_code=422, detail=detail) from error
+    revocation = state.registry.revoke(
+        agent_id, key_id, reason=reason, revoked_by=payload.revoked_by, at=datetime.now(UTC)
+    )
+    return _revocation_to_out(revocation)
+
+
+@app.post("/agents/{agent_id}/keys/{old_key_id}/rotate", response_model=KeyRevocationOut)
+def rotate_key(
+    agent_id: str, old_key_id: str, payload: RotateKeyRequest, state: AppState = Depends(get_state)
+) -> KeyRevocationOut:
+    """Rotates an agent's key: registers the new one immediately, schedules the old one's revocation.
+
+    Both the old and new key verify for any session presented before the
+    overlap window ends; only the old key stops verifying once it does.
+
+    Args:
+        agent_id: The agent whose key is being rotated.
+        old_key_id: The key fingerprint being rotated out.
+        payload: The incoming key, the overlap window length, and the
+            rotating actor.
+        state: The shared application state.
+
+    Returns:
+        The old key's scheduled revocation (its `effective_at` is the end
+        of the overlap window, not now).
+
+    Raises:
+        HTTPException: 400, if `payload.new_public_key_base64` is not
+            valid base64 or not a valid Ed25519 public key.
+    """
+    try:
+        raw = base64.b64decode(payload.new_public_key_base64, validate=True)
+        new_public_key = Ed25519PublicKey.from_public_bytes(raw)
+    except (ValueError, InvalidKey) as error:
+        raise HTTPException(status_code=400, detail=f"invalid Ed25519 public key: {error}") from error
+
+    now = datetime.now(UTC)
+    overlap_until = now + timedelta(hours=payload.overlap_hours)
+    revocation = state.registry.rotate(
+        agent_id,
+        old_key_id,
+        payload.new_key_id,
+        new_public_key,
+        overlap_until=overlap_until,
+        rotated_by=payload.rotated_by,
+        at=now,
+    )
+    return _revocation_to_out(revocation)
+
+
+@app.get("/agents/{agent_id}/keys/{key_id}/revocation", response_model=KeyRevocationOut | None)
+def get_key_revocation(agent_id: str, key_id: str, state: AppState = Depends(get_state)) -> KeyRevocationOut | None:
+    """Looks up a key's revocation record, if any. Read-only.
+
+    Args:
+        agent_id: The agent identity to look up.
+        key_id: The key ID to look up.
+        state: The shared application state.
+
+    Returns:
+        The revocation, regardless of whether its `effective_at` has
+        passed yet (a scheduled-but-not-yet-effective rotation still shows
+        here), or None if this key was never revoked.
+    """
+    revocation = state.registry.revocation_for(agent_id, key_id)
+    return _revocation_to_out(revocation) if revocation is not None else None
+
+
+def _deterministic_to_schema(cf: DeterministicCounterfactual) -> Counterfactual:
+    """Converts a `counterfactual.deterministic.Counterfactual` to its audit/wire form.
+
+    Args:
+        cf: The counterfactual to convert.
+
+    Returns:
+        The equivalent `reasoning.schema.Counterfactual`, dropping only
+        `solver_verified` -- an internal correctness detail of how `cf` was
+        computed, not part of what a caller or the audit trail needs.
+    """
+    return Counterfactual(
+        layer=cf.layer,
+        feasible=cf.feasible,
+        edits=tuple(CounterfactualEdit(e.field, e.real_value, e.suggested_value) for e in cf.edits),
+        explanation=cf.explanation,
+    )
+
+
+def _behavioral_to_schema(cf: BehavioralCounterfactual) -> Counterfactual:
+    """Converts a `counterfactual.behavioral.BehavioralCounterfactual` to its audit/wire form.
+
+    Args:
+        cf: The counterfactual to convert.
+
+    Returns:
+        The equivalent `reasoning.schema.Counterfactual`, formatting each
+        edit's numeric values to four decimal places, matching
+        `reasoning.narrate`'s own SHAP-value formatting convention.
+    """
+    return Counterfactual(
+        layer="layer3_behavioral",
+        feasible=cf.feasible,
+        edits=tuple(
+            CounterfactualEdit(e.feature, f"{e.real_value:.4f}", f"{e.suggested_value:.4f}") for e in cf.edits
+        ),
+        explanation=cf.explanation,
+    )
+
+
+def _circuit_breaker_response(trace: SessionTrace, state: AppState) -> SessionDecisionResponse:
+    """Builds the short-circuited response for a session from a suspended agent.
+
+    Layers 1-3 never run at all -- a suspended agent is categorically not
+    authorized to transact, so evaluating whether this particular session
+    would otherwise have been fine is moot. Still produces a full audit
+    record, same as every other decision this service makes; append-only
+    means no decision, including this one, skips the trail.
+
+    Args:
+        trace: The session under evaluation.
+        state: The shared application state.
+
+    Returns:
+        The response, with `ensemble.source == SOURCE_CIRCUIT_BREAKER`.
+    """
+    baseline = BaselineDecision(session_id=trace.session_id, blocked=True, verification_reasons=(), scope_reasons=())
+    ensemble = EnsembleDecision(
+        session_id=trace.session_id,
+        blocked=True,
+        source=SOURCE_CIRCUIT_BREAKER,
+        behavioral_score=None,
+        rules_fired=(CIRCUIT_BREAKER_RULE_NAME,),
+    )
+    narrative_text = CIRCUIT_BREAKER_NARRATIVE_TEMPLATE.format(agent_id=trace.agent_id)
+    state.audit_log.append(
+        AuditRecord(
+            record_id=uuid4(),
+            session_id=trace.session_id,
+            mandate_id=trace.mandate_id,
+            blocked=True,
+            source=ensemble.source,
+            rules_fired=ensemble.rules_fired,
+            behavioral_score=None,
+            top_features=(),
+            counterfactual=None,
+            narrative=narrative_text,
+            narrated_by_model="none (circuit breaker short-circuit, narration not consulted)",
+            created_at=datetime.now(UTC),
+        )
+    )
+    return SessionDecisionResponse(
+        session_id=trace.session_id,
+        baseline=baseline_to_out(baseline),
+        ensemble=ensemble_to_out(ensemble),
+        attribution=None,
+        narrative=None,
+        counterfactual=None,
+    )
+
+
 @app.post("/sessions/decide", response_model=SessionDecisionResponse)
 def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> SessionDecisionResponse:
     """Runs one session through all four layers and returns the full decision.
@@ -224,11 +495,20 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
     Returns:
         The full decision record: Layer 1/2 verdict, the combined
         ensemble verdict, per-feature attribution (if Layer 3 was
-        consulted), and a Layer 4 narrative (if a narration client is
-        configured for this service instance).
+        consulted), a Layer 4 narrative (if a narration client is
+        configured for this service instance), and, for a blocked session,
+        a minimal-edit counterfactual explanation (see
+        `counterfactual.deterministic` and `counterfactual.behavioral`).
+        Short-circuited entirely -- Layers 1-3 never run -- if the session's
+        agent is currently suspended by the escalation queue's circuit
+        breaker (`escalation/circuit_breaker.py`).
     """
     trace = payload.trace
     signed = payload.signed_mandate
+    decision_now = datetime.now(UTC)
+
+    if state.escalation_queue.is_agent_suspended(trace.agent_id):
+        return _circuit_breaker_response(trace, state)
 
     if signed is None:
         scope_result = enforce_scope(trace, None)
@@ -236,7 +516,10 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
             session_id=trace.session_id, blocked=True, verification_reasons=(), scope_reasons=scope_result.reasons
         )
     else:
-        verification = verify_mandate(signed, state.registry, state.ledger, now=trace.started_at)
+        state.mandate_store.add(signed.mandate)
+        verification = verify_mandate(
+            signed, state.registry, state.ledger, now=trace.started_at, revocation_checked_at=decision_now
+        )
         scope_result = enforce_scope(trace, signed)
         blocked = not verification.valid or not scope_result.in_scope
         if not blocked:
@@ -255,11 +538,39 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
     behavioral_score = None if baseline.blocked else float(state.model.predict_proba(design_matrix)[0])
     ensemble = ensemble_decide(baseline, behavioral_score, state.threshold)
 
+    if ensemble.source == SOURCE_BEHAVIORAL:
+        assert ensemble.behavioral_score is not None  # SOURCE_BEHAVIORAL implies a score was computed
+        state.escalation_queue.open_escalation(
+            session_id=trace.session_id,
+            agent_id=trace.agent_id,
+            reason=f"behavioral score {ensemble.behavioral_score:.4f} >= threshold {state.threshold:.4f}",
+            at=trace.started_at,
+        )
+
     attribution_out: list[AttributionRowOut] | None = None
     attribution_result = None
     if behavioral_score is not None:
         attribution_result = compute_attribution(state.model, design_matrix)
         attribution_out = attribution_row_to_out(attribution_result, 0)
+
+    counterfactual: Counterfactual | None = None
+    if ensemble.blocked and ensemble.source == SOURCE_RULES:
+        det_cf = None
+        if signed is not None:
+            det_cf = verification_counterfactual(
+                signed, state.registry, state.ledger, now=trace.started_at, revocation_checked_at=decision_now
+            )
+        if det_cf is None:
+            det_cf = scope_counterfactual(trace, signed)
+        if det_cf is not None:
+            counterfactual = _deterministic_to_schema(det_cf)
+    elif ensemble.blocked and ensemble.source == SOURCE_BEHAVIORAL:
+        assert attribution_result is not None  # SOURCE_BEHAVIORAL implies Layer 3 was consulted
+        behavioral_cf = behavioral_counterfactual(
+            state.model, design_matrix, attribution_result, row_index=0, threshold=state.threshold
+        )
+        if behavioral_cf is not None:
+            counterfactual = _behavioral_to_schema(behavioral_cf)
 
     narrative_out = None
     if state.narration_client is not None:
@@ -271,10 +582,16 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
             row_index=0 if attribution_result is not None else None,
             threshold=state.threshold,
         )
-        narration = narrate(narration_input, state.narration_client, model=state.narration_model)
-        narrative_out = narration_to_out(narration)
-        narrative_text = narration.narrative
-        narrated_by = narration.model
+        try:
+            narration = narrate(narration_input, state.narration_client, model=state.narration_model)
+        except Exception:
+            logger.warning("session %s: Layer 4 narration call failed, falling back", trace.session_id, exc_info=True)
+            narrative_text = NARRATION_FAILED_TEXT
+            narrated_by = NARRATION_FAILED_MODEL
+        else:
+            narrative_out = narration_to_out(narration)
+            narrative_text = narration.narrative
+            narrated_by = narration.model
     else:
         narrative_text = NARRATION_UNAVAILABLE_TEXT
         narrated_by = NARRATION_UNAVAILABLE_MODEL
@@ -292,6 +609,7 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
             rules_fired=ensemble.rules_fired,
             behavioral_score=ensemble.behavioral_score,
             top_features=top_features,
+            counterfactual=counterfactual,
             narrative=narrative_text,
             narrated_by_model=narrated_by,
             created_at=datetime.now(UTC),
@@ -304,6 +622,7 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
         ensemble=ensemble_to_out(ensemble),
         attribution=attribution_out,
         narrative=narrative_out,
+        counterfactual=counterfactual_to_out(counterfactual) if counterfactual is not None else None,
     )
 
 
@@ -318,6 +637,7 @@ class AuditRecordOut(BaseModel):
     rules_fired: list[str]
     behavioral_score: float | None
     top_features: list[tuple[str, float]]
+    counterfactual: CounterfactualOut | None
     narrative: str
     narrated_by_model: str
     created_at: datetime
@@ -348,9 +668,194 @@ def get_audit(session_id: UUID, state: AppState = Depends(get_state)) -> list[Au
             rules_fired=list(r.rules_fired),
             behavioral_score=r.behavioral_score,
             top_features=list(r.top_features),
+            counterfactual=counterfactual_to_out(r.counterfactual) if r.counterfactual is not None else None,
             narrative=r.narrative,
             narrated_by_model=r.narrated_by_model,
             created_at=r.created_at,
         )
         for r in records
     ]
+
+
+@app.get("/escalations", response_model=list[EscalationOut])
+def list_escalations(
+    status: str | None = None, agent_id: str | None = None, state: AppState = Depends(get_state)
+) -> list[EscalationOut]:
+    """Lists escalations, optionally filtered. Read-only.
+
+    Args:
+        status: If given, one of `"open"`, `"reviewed"`, `"resolved"`.
+        agent_id: If given, only escalations for this agent.
+        state: The shared application state.
+
+    Returns:
+        Matching escalations.
+
+    Raises:
+        HTTPException: 400, if `status` is not a recognized value.
+    """
+    parsed_status: EscalationStatus | None = None
+    if status is not None:
+        try:
+            parsed_status = EscalationStatus(status)
+        except ValueError as error:
+            valid = [s.value for s in EscalationStatus]
+            raise HTTPException(status_code=400, detail=f"invalid status {status!r}; must be one of {valid}") from error
+    escalations = state.escalation_queue.list_all(status=parsed_status, agent_id=agent_id)
+    return [escalation_to_out(e) for e in escalations]
+
+
+@app.get("/escalations/{escalation_id}", response_model=EscalationOut)
+def get_escalation(escalation_id: UUID, state: AppState = Depends(get_state)) -> EscalationOut:
+    """Looks up one escalation. Read-only.
+
+    Args:
+        escalation_id: The escalation to look up.
+        state: The shared application state.
+
+    Returns:
+        The escalation.
+
+    Raises:
+        HTTPException: 404, if no such escalation exists.
+    """
+    escalation = state.escalation_queue.get(escalation_id)
+    if escalation is None:
+        raise HTTPException(status_code=404, detail=f"no escalation {escalation_id}")
+    return escalation_to_out(escalation)
+
+
+@app.post("/escalations/{escalation_id}/review", response_model=EscalationOut)
+def review_escalation(
+    escalation_id: UUID, payload: ReviewEscalationRequest, state: AppState = Depends(get_state)
+) -> EscalationOut:
+    """Marks an open escalation reviewed. Mutates escalation state only -- never a mandate or a payment.
+
+    Args:
+        escalation_id: The escalation to review.
+        payload: The reviewing actor and their notes.
+        state: The shared application state.
+
+    Returns:
+        The updated escalation.
+
+    Raises:
+        HTTPException: 404 if no such escalation exists, 409 if it is not
+            currently open, 422 if `payload.actor` is the system actor.
+    """
+    try:
+        escalation = state.escalation_queue.review(
+            escalation_id, actor=payload.actor, note=payload.note, at=datetime.now(UTC)
+        )
+    except EscalationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except InvalidTransitionError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except HumanActionRequiredError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return escalation_to_out(escalation)
+
+
+@app.post("/escalations/{escalation_id}/resolve", response_model=EscalationOut)
+def resolve_escalation(
+    escalation_id: UUID, payload: ResolveEscalationRequest, state: AppState = Depends(get_state)
+) -> EscalationOut:
+    """Resolves a reviewed escalation. Mutates escalation state only -- never a mandate or a payment.
+
+    Args:
+        escalation_id: The escalation to resolve.
+        payload: The resolving actor, their notes, and the decision.
+        state: The shared application state.
+
+    Returns:
+        The updated escalation.
+
+    Raises:
+        HTTPException: 404 if no such escalation exists, 409 if it has not
+            been reviewed yet, 422 if `payload.actor` is the system actor
+            or `payload.decision` is not a recognized value.
+    """
+    try:
+        decision = ResolutionDecision(payload.decision)
+    except ValueError as error:
+        valid = [d.value for d in ResolutionDecision]
+        detail = f"invalid decision {payload.decision!r}; must be one of {valid}"
+        raise HTTPException(status_code=422, detail=detail) from error
+    try:
+        escalation = state.escalation_queue.resolve(
+            escalation_id, actor=payload.actor, note=payload.note, decision=decision, at=datetime.now(UTC)
+        )
+    except EscalationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except InvalidTransitionError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except HumanActionRequiredError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return escalation_to_out(escalation)
+
+
+@app.get("/agents/{agent_id}/circuit-breaker", response_model=CircuitBreakerStatusOut)
+def get_circuit_breaker_status(agent_id: str, state: AppState = Depends(get_state)) -> CircuitBreakerStatusOut:
+    """Reports whether an agent is currently suspended. Read-only.
+
+    Args:
+        agent_id: The agent to check.
+        state: The shared application state.
+
+    Returns:
+        The agent's current suspension status.
+    """
+    return CircuitBreakerStatusOut(agent_id=agent_id, suspended=state.escalation_queue.is_agent_suspended(agent_id))
+
+
+@app.post("/agents/{agent_id}/circuit-breaker/reset", response_model=CircuitBreakerStatusOut)
+def reset_circuit_breaker(
+    agent_id: str, payload: CircuitBreakerResetRequest, state: AppState = Depends(get_state)
+) -> CircuitBreakerStatusOut:
+    """Lifts an agent's suspension -- the only way one is ever lifted.
+
+    Never touches a mandate, a session, or a payment: this endpoint's only
+    effect is on the circuit breaker's own suspension state for one agent.
+
+    Args:
+        agent_id: The agent to reset.
+        payload: The resetting actor and their notes.
+        state: The shared application state.
+
+    Returns:
+        The agent's suspension status after the reset (always `False`).
+
+    Raises:
+        HTTPException: 409 if the agent is not currently suspended, 422 if
+            `payload.actor` is the system actor.
+    """
+    try:
+        state.escalation_queue.reset_circuit_breaker(
+            agent_id, actor=payload.actor, note=payload.note, at=datetime.now(UTC)
+        )
+    except InvalidTransitionError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except HumanActionRequiredError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return CircuitBreakerStatusOut(agent_id=agent_id, suspended=False)
+
+
+@app.get("/mandates/{mandate_id}/chain", response_model=DelegationChainOut)
+def get_mandate_chain(mandate_id: UUID, state: AppState = Depends(get_state)) -> DelegationChainOut:
+    """Returns a mandate's full delegation chain, each node's containment verdict included. Read-only.
+
+    Args:
+        mandate_id: The mandate to build the chain for.
+        state: The shared application state.
+
+    Returns:
+        The chain -- see `service.delegation_chain.build_delegation_chain`.
+
+    Raises:
+        HTTPException: 404, if no such mandate has been presented to this
+            service instance yet.
+    """
+    mandate = state.mandate_store.get(mandate_id)
+    if mandate is None:
+        raise HTTPException(status_code=404, detail=f"no mandate {mandate_id} known to this service instance")
+    return build_delegation_chain(mandate, state.mandate_store)

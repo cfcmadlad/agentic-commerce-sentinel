@@ -30,6 +30,8 @@ dependencies = [
     # Graph construction and Louvain community detection for
     # cross-session/cross-agent collusion-ring detection -- see /collusion.
     "networkx==3.6.1",
+    # Declarative policy documents -- see /policy.
+    "pyyaml==6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +44,9 @@ dev = [
     # real deployment (the API service) sets environment
     # variables through its own runtime, not a checked-out .env file.
     "python-dotenv==1.2.3",
+    # Property-based testing for the delegation-containment invariants --
+    # see /tests/test_containment_properties.py and docs/adr/0012.
+    "hypothesis==6.167.0",
 ]
 # The dashboard is a static export with no server-side dependencies of its
 # own (see frontend/); nothing further is pinned speculatively here.
@@ -51,7 +56,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*", "containment*", "formal*", "collusion*"]
+include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*", "containment*", "formal*", "collusion*", "counterfactual*", "escalation*", "interop*", "policy*", "manifest*"]
 
 [tool.ruff]
 line-length = 120

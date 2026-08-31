@@ -663,6 +663,100 @@ code,
   font-weight: 500;
 }
 
+/* ---------- Operations: governed live agent + proof panel ----------
+   This app has no router or per-page theme (one continuous scroll, see
+   components/AppShell.tsx), so the denser/darker treatment the project
+   brief allows for a "live operations" view is scoped to the single
+   self-contained .ops-terminal panel below, not the whole page or app --
+   everything else here stays the same light ink-on-paper system. */
+
+.ops-invocation-list {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ops-invocation-list li {
+  font-size: var(--text-xs);
+  color: var(--slate);
+  padding: 5px 9px;
+  background: var(--fog);
+  border-radius: var(--radius-sm);
+}
+
+.ops-invocation--error {
+  color: var(--status-blocked);
+  background: var(--status-blocked-bg);
+}
+
+.ops-terminal {
+  background: #0d0e10;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.9;
+  max-height: 320px;
+  overflow-y: auto;
+  color: #d7d8db;
+}
+
+.ops-terminal__row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  border-bottom: 1px solid #202226;
+  padding: 2px 0;
+  animation: ops-row-in 0.25s ease-out;
+}
+
+.ops-terminal__row--muted {
+  color: #5a5d64;
+}
+
+.ops-terminal__seq {
+  color: #5a5d64;
+  min-width: 44px;
+}
+
+.ops-terminal__agent {
+  color: #8fd3ff;
+  min-width: 90px;
+}
+
+.ops-terminal__category {
+  color: #d7d8db;
+  min-width: 170px;
+}
+
+.ops-terminal__score {
+  color: #9a9da5;
+  min-width: 110px;
+}
+
+.ops-terminal__verdict {
+  color: #6fcf8e;
+}
+
+.ops-terminal__verdict--block {
+  color: #e8836f;
+}
+
+@keyframes ops-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ---------- Data tables ---------- */
 
 .data-table {

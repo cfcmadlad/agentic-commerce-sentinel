@@ -108,6 +108,15 @@ export function EvaluationIcon({ className }: { className?: string }) {
   );
 }
 
+export function OperationsIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" />
+      <path d="M8.3 15.7a5.4 5.4 0 0 1 0-7.4M15.7 15.7a5.4 5.4 0 0 0 0-7.4M5.2 18.8a9.8 9.8 0 0 1 0-13.6M18.8 18.8a9.8 9.8 0 0 0 0-13.6" {...STROKE} />
+    </IconBase>
+  );
+}
+
 export function AboutIcon({ className }: { className?: string }) {
   return (
     <IconBase className={className}>

@@ -1,11 +1,17 @@
 # Agentic-Commerce Transaction Sentinel
 
-**A defense-only verification layer that checks whether an AI agent's payment stays inside what its human actually authorized — before the payment goes through.**
+**This project does not just enable an AI agent to pay on a human's behalf — it proves, mechanically and reproducibly, that the agent stayed inside what that human actually authorized, and says so honestly even in the one case where it currently does not.**
+
+Protocols like Google's AP2, OpenAI's Agentic Commerce Protocol, and NPCI's in-development UAP solve a real, different problem: how an agent expresses and carries a human's authorization at all — a signed intent, a merchant-signed cart, a payment credential. None of them, by their own published schemas, answer the second question: given a genuine, correctly-signed authorization, did *this specific transaction*, or *this specific act of delegating to another agent*, actually stay inside it? That second question is this project's entire scope. It is not a replacement for Razorpay's own risk stack ([§2](#2-why-this-doesnt-duplicate-razorpays-existing-stack)) or for an enablement protocol like AP2 ([§8](#8-why-ap2-not-npcis-uap)) — it is a layer that could sit in front of either, checking the one thing neither is built to check.
+
+Novelty claim, stated the same way this project states its own evaluation numbers — precisely, not as a sweeping first-of-its-kind claim: this project is not aware of prior work combining formal (Z3) verification of the deterministic authorization-scope logic, graph-based cross-agent collusion detection, and committed reproducibility-manifest attestation in one agent-payment governance system. That is a claim about what was found while researching this space, not a claim that nothing like it exists anywhere.
 
 Built for Razorpay's AI Buildathon 2026, Track 02 (AI Risk Manager). New here? [`OVERVIEW.md`](OVERVIEW.md) is a five-minute, plain-language read before this document's full technical depth.
 
 ### What to look at in three minutes
 
+- **Watch a real agent get governed, live** (the Operations view's headline scenario — run `python run_agent_demo_export.py` and open the deployed app, or `docs/adr/0016-governed-live-agent.md`): a real, tool-calling Groq agent attempts a budget-inflated delegation; the real decision pipeline allows the transaction itself (it fits the child mandate's own ceiling) while a separate, real Layer 2.5 check catches the delegation and opens a real escalation — the exact disclosed gap below, caught live instead of only reported.
+- **The proof panel** (Operations view): the real 8/8 Z3-proved safety properties, the real McNemar/bootstrap-CI significance result, and the reproducibility manifest's hash — rendered from real exports, not restated from memory.
 - **The architecture** ([§3](#3-architecture)): four layers, deterministic checks that can only ever add a block on top of what came before, never get overridden by the learned one.
 - **The headline result, with its receipt** ([§7](#7-evaluation-results)): AUC-PR 0.9982, p ≈ 1.4 × 10⁻¹² — and the exact command plus manifest hash that reproduces it byte-for-byte, not just a number to trust.
 - **The result that mattered most** (§7's held-out class result, near the end): the original architecture caught 0% of a held-out attack class it was never trained or tuned against; a new deterministic layer built specifically for the gap recovered 76.14% of it, and the 2.59% still missed is disclosed, not hidden.
@@ -477,6 +483,28 @@ The mandate format takes AP2 (Google's Agent Payments Protocol, `google-agentic-
 
 It is **not** modeled on NPCI's own Unified Agent Protocol, because as of this writing, UAP has no published technical schema. It's publicly reported to be under active development at NPCI, built on top of UPI Circle's existing delegated-payments feature, and still awaiting RBI regulatory approval before launch. Building against a real, citable spec is a defensible engineering choice; claiming to implement UAP itself, when no public schema exists to implement, would not be. Where UAP's reported design is known — per-merchant spending limits, consent-based delegation — this project's schema follows that direction anyway, so the fit is closer than "arbitrary substitute picked for convenience."
 
+OpenAI's Agentic Commerce Protocol (ACP, built with Stripe) sits in the same category as AP2 for this project's purposes: a real, public enablement protocol for how an agent carries and presents a human's purchase authorization, not verified field-by-field here the way AP2 was for Milestone J, and not claimed to be.
+
+### The pre-authorization gap AP2 (and protocols like it) cannot check by construction
+
+`docs/adr/0010-ap2-interop-adapter.md`'s field-by-field verification against the live AP2 repository (table above) found something worth stating as a diagram, not just a table row: **AP2's own mandate schema has no field, at any stage of its lifecycle, for how *wide* an authorization is, or whether a delegated one stays inside its parent's.** That isn't an oversight this project's adapter papers over — it's a different problem AP2 was never built to solve.
+
+```mermaid
+flowchart TD
+    I["Intent Mandate\nuser-signed consent to shop\nno amount field, no category field"] --> C["Cart Mandate\nmerchant-signed price commitment\nthe only place a price exists in AP2"] --> P["Payment Mandate\nsingle-transaction execution"]
+
+    I -.-> GAP
+    C -.-> GAP
+    P -.-> GAP
+
+    GAP["The pre-authorization gap\nno field anywhere above answers:\nhow wide is this authorization,\nor does a delegated mandate stay\ninside its parent's authority --\na missing concept, not a missing check"]
+
+    GAP --> L2["This project's Layer 2\nscope enforcement"]
+    GAP --> L25["This project's Layer 2.5\ndelegation-chain containment"]
+```
+
+Layer 1 (mandate verification) is the one layer with a rough AP2-side analogue — AP2's own Verifiable-Credential signatures check "is this genuine and not expired" too, just via a different scheme (opaque VC strings, not this project's raw Ed25519-over-canonical-bytes; see `docs/adr/0010`). Layers 2 and 2.5 have no analogue at all: `MandateScope`'s category fields and `parent_mandate_id` are this project's own additions, designed independently because AP2's real schema (verified live, not assumed) has nothing to translate them from. That is the literal reading of "AP2-inspired, not an implementation of AP2" — the inspiration stops exactly where the pre-authorization gap starts.
+
 ## 9. What's not built yet, and why
 
 **Live demo hosted publicly against a live API, not done.** The frontend's live demo view genuinely calls the real API service (§4) when a `VITE_API_BASE_URL` is configured — real signed requests, a real running pipeline, real accumulated agent history seeded once at startup (`service/demo_seed.py`) — verified end to end against a local instance. What is not done is standing that API service up as a public, continuously running deployment: that is a different risk profile from hosting the static frontend (a real process, a Groq secret to manage, a model-fit cold start on every restart) and remains a deliberate, separate decision. The publicly hosted frontend therefore still falls back to its original static fixtures, unchanged in behavior from before the live wiring existed.
@@ -598,7 +626,10 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
               company/organization/agent/session drill-down, a live-demo
               decisions view (wired to a live, configured API service, falls
               back to fixtures otherwise), a sandbox running a real
-              client-side port of Layer 2's rules, a real-data score
+              client-side port of Layer 2's rules, a delegation-chain graph
+              view, an Operations view (the governed live agent's four real
+              scenarios, a real-corpus replay feed, and a Proof Panel citing
+              real Z3/McNemar/CI/manifest exports), a real-data score
               explorer (scatter + risk-terrain views), and a static
               evaluation report export
 /docs/adr     architecture decision records
@@ -611,7 +642,9 @@ run_full_eval.py        command-line entry point for the full evaluation
 run_held_out_eval.py    command-line entry point for the held-out class evaluation
 run_containment_eval.py command-line entry point for the Layer 2.5 evaluation
 run_verify_policy_properties.py command-line entry point for the Z3 formal
-                        verification of Layers 1, 2, and 2.5
+                        verification of Layers 1, 2, and 2.5 (`--json-out`
+                        exports the property-by-property result for the
+                        frontend's Proof Panel)
 run_collusion_eval.py   command-line entry point for the collusion-ring
                         detection evaluation
 run_verify_audit_chain.py command-line entry point verifying a hash-chained

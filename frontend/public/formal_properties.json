@@ -1,0 +1,61 @@
+{
+  "properties": [
+    {
+      "name": "amount_ceiling_no_tolerance",
+      "layer": "Layer 2 (scope enforcement)",
+      "description": "An amount strictly over the mandate's ceiling always denies scope, no matter what every other field is set to -- there is no combination of matching currency, category, merchant, or timing that lets an over-ceiling transaction through.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "merchant_allowlist_cannot_be_bypassed",
+      "layer": "Layer 2 (scope enforcement)",
+      "description": "When a mandate restricts to specific merchants, a transaction with an unlisted merchant always denies scope, regardless of every other field being otherwise fully compliant.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "expired_mandate_never_verifies",
+      "layer": "Layer 1 (mandate verification)",
+      "description": "A mandate presented after its own expires_at never verifies, regardless of signature validity, key registration, or remaining budget.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "budget_exhausted_mandate_never_verifies",
+      "layer": "Layer 1 (mandate verification)",
+      "description": "A mandate whose usage_count has reached its max_transaction_count never verifies, regardless of signature validity, key registration, or the time window.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "delegated_scope_only_attenuates",
+      "layer": "Layer 2.5 (delegation-chain containment)",
+      "description": "Whenever containment accepts a delegated mandate, that mandate's ceiling, category reach, merchant allowlist, transaction window, and transaction count are each no broader than its parent's -- authority can only narrow across an accepted delegation, never widen.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "no_accepted_chain_exceeds_depth_bound",
+      "layer": "Layer 2.5 (delegation-chain containment)",
+      "description": "Whenever containment accepts a delegated mandate, its resolved ancestor chain is no more than 3 hops deep -- an accepted chain never exceeds the configured depth bound.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "sibling_committed_total_never_exceeds_parent_cap",
+      "layer": "Layer 2.5 (delegation-chain containment)",
+      "description": "For any group of up to 4 sibling mandates chained from one parent and decided in sequence by the real running-ledger algorithm, the sum of every accepted sibling's own ceiling never exceeds the parent's cap -- for every possible combination of sibling amounts in the bounded space, not just the ones any generated corpus happened to produce.",
+      "proved": true,
+      "counterexample": null
+    },
+    {
+      "name": "no_session_both_allowed_and_flagged_for_hold",
+      "layer": "Combination logic (Layers 1, 2, 2.5, and Layer 3's abstracted contribution)",
+      "description": "No session can be simultaneously auto-approved and flagged for escalation to human review, for any combination of the deterministic layers' verdicts and any value Layer 3's own score might take.",
+      "proved": true,
+      "counterexample": null
+    }
+  ],
+  "all_proved": true
+}

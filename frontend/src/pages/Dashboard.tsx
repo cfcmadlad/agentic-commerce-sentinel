@@ -4,6 +4,7 @@ import Decisions from "./Decisions";
 import Delegation from "./Delegation";
 import Evaluation from "./Evaluation";
 import Explorer from "./Explorer";
+import Operations from "./Operations";
 import Sandbox from "./Sandbox";
 import OrgDrilldown from "../components/OrgDrilldown";
 import ThresholdSparkline from "../components/ThresholdSparkline";
@@ -154,6 +155,11 @@ export default function Dashboard() {
       <section id="delegation">
         <h1>Delegation</h1>
         <Delegation />
+      </section>
+
+      <section id="operations">
+        <h1>Operations</h1>
+        <Operations collision={collision} />
       </section>
 
       <section id="explorer">

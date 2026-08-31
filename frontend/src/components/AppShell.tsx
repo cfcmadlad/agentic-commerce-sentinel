@@ -6,6 +6,7 @@ import {
   DelegationIcon,
   EvaluationIcon,
   ExplorerIcon,
+  OperationsIcon,
   OrganizationsIcon,
   OverviewIcon,
   SandboxIcon,
@@ -47,6 +48,7 @@ const SECTIONS = [
   { id: "decisions", label: "Decisions", icon: DecisionsIcon },
   { id: "sandbox", label: "Sandbox", icon: SandboxIcon },
   { id: "delegation", label: "Delegation", icon: DelegationIcon },
+  { id: "operations", label: "Operations", icon: OperationsIcon },
   { id: "explorer", label: "Explorer", icon: ExplorerIcon },
   { id: "evaluation", label: "Evaluation", icon: EvaluationIcon },
 ];

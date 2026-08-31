@@ -136,10 +136,94 @@ escalation through `decide()`'s existing path with no new code) and outcome
 4 (the containment violation, opening an escalation through this package's
 own new, mirrored call). Both land in the same real human-review queue.
 
+## Phase 2: making the rigor visible in the UI
+
+Started only once Phase 1 was fully working end to end, per the sprint
+brief's own phase ordering. Two additions, both read-only presentations of
+already-real, already-committed data -- no new claim, no new computation.
+
+**Step 0 correction.** The brief's own Step 0 findings (and this document's
+earlier draft) described the frontend as a sidebar `id`-based *page*
+switcher with a `NAV_ITEMS` array. Re-reading the actual current
+`frontend/src/components/AppShell.tsx` and `frontend/src/pages/Dashboard.tsx`
+(rewritten since that finding, per `PROJECT_PLAN.md`'s Milestone F2 history)
+found something more specific: there is no router and no page-switching at
+all. Every "page" is a `<section id="...">` composed inline inside one
+continuous scroll (`Dashboard.tsx`); `AppShell.tsx`'s array (`SECTIONS`, not
+`NAV_ITEMS`) only drives scroll-spy anchor links into that single page. A new
+"Operations" view means a new `SECTIONS` entry plus a new inline `<section>`
+in `Dashboard.tsx`, not a new routed page -- built that way here.
+
+**`frontend/src/pages/Operations.tsx`**, a new section between Delegation and
+Explorer (placement is a judgment call, not dictated by the brief: Operations
+conceptually follows "you've just seen delegation-chain containment
+explained" and precedes "here are the full evaluation numbers"), with three
+panels:
+
+1. The four real `agent_demo.json` scenario transcripts (from
+   `run_agent_demo_export.py`), selectable via the same `session-rail` list
+   pattern `Delegation.tsx` already established -- real tool-call sequence,
+   real verdict badges (the headline scenario shows the `decide()` verdict
+   and the separate Layer 2.5 containment verdict side by side, deliberately
+   never conflated into one badge, mirroring how `agent.tools.checkout`
+   itself keeps them separate). `llm_backend` is always rendered, unhidden:
+   this build's committed export used `--fake-llm` (this development
+   machine's local proxy cannot reach Groq -- the same
+   `CERTIFICATE_VERIFY_FAILED` characteristic already documented for the
+   seven pre-existing live-Groq tests), never presented as if it were live.
+2. `.ops-terminal`, a live-feeling replay feed. Not live traffic (this
+   hosted build has no backend to stream from) -- a genuinely ticking list
+   replaying real `collision.json` sessions (already-exported, already used
+   elsewhere in this dashboard), sequence-numbered, never a timestamp
+   presented as elapsed real time.
+3. A Proof Panel citing, never recomputing: the real Z3 8/8 property-by-
+   property result (new `--json-out` flag on `run_verify_policy_properties
+   .py`, exported to `formal_properties.json`), the real McNemar p-value and
+   ensemble AUC-PR bootstrap CI (already in `metrics.json`, reused rather
+   than duplicated), a static, ADR/test-file-cited description of the
+   Hypothesis property-based invariants (no new export mechanism was built
+   for this one, since the brief only asked that the panel *state* what was
+   checked, not compute a new number), and the headline reproducibility
+   manifest's already-published content hash with a real, working link (the
+   real committed file, vendored into `frontend/public/manifests/` so the
+   hosted static site has something to actually serve).
+
+**The scoped dark/dense treatment, adapted to the real architecture.** The
+brief allowed a denser, darker visual mode for this one operational view,
+scoped to "a toggle or a distinct route." Neither exists in the real
+architecture (see the Step 0 correction above) -- there is one continuous,
+otherwise-light scroll with no per-section theming and no router. A
+route-level or global dark toggle would need inventing infrastructure this
+app deliberately doesn't have, and a full-section dark background would
+visually clash at the scroll boundary with the light sections immediately
+above and below it. Adapted, not skipped: the dark, dense treatment is
+scoped to one small, self-contained panel (`.ops-terminal`, a fixed near-
+black background regardless of viewer theme, like an embedded code block)
+rather than the whole section or the app -- everything else on the
+Operations section, and the rest of the app, stays the same achromatic
+ink-on-paper system unchanged.
+
+**Not built:** the optional live-HTTP mode for `checkout` (Section 4.3's
+"additionally support... hitting a configured live API base URL") was
+already out of scope for Phase 1 as shipped -- `checkout` calls `decide()`
+in-process only. `Operations.tsx` therefore has no live mode either (unlike
+`Delegation.tsx`, which has one because the backend chain-lookup endpoint it
+calls already exists); it is recorded-only, exactly like every other
+Phase-1-driven view's fallback path when no live API is configured.
+
+Verified: `tsc -b --noEmit` and `oxlint` both clean, `npm run build` clean,
+and the rendered page inspected directly (DOM/computed content, not just
+"it compiled") for both scenarios' verdict badges, the ticking replay feed,
+the 8/8 property table, and the manifest link resolving to the real vendored
+file -- including at a mobile viewport width, where the sidebar's existing
+horizontal-collapse behavior (unmodified) still fits the new nav entry.
+
 ## Consequences
 
 - A judge can watch a real LLM decide what to attempt and watch the real
-  Sentinel allow, block, or escalate it -- not a scripted verdict.
+  Sentinel allow, block, or escalate it -- not a scripted verdict -- and can
+  now see that same real verdict, plus the project's formal-verification and
+  significance results, in the UI rather than only in README prose.
 - The non-offensive and isolation boundaries are enforced by AST-level
   tests and a snapshot regression guard, not only by convention.
 - `agent.llm_client` duplicates a small amount of structure from
@@ -148,6 +232,6 @@ own new, mirrored call). Both land in the same real human-review queue.
   -- a deliberate tradeoff: the two modules must stay architecturally
   distinct, and the actual call shape (tool calls vs. plain text) differs
   enough that a shared abstraction would cost more clarity than it saves.
-- Phase 2 (a live operations view, a proof panel) is not part of this
-  milestone and depends on it being fully working first, per the sprint
-  brief's own phase ordering.
+- The Operations view is recorded-only, no live-HTTP mode, since `checkout`
+  itself has none -- adding one to either would be a real, separate future
+  decision, not a Phase 2 afterthought.

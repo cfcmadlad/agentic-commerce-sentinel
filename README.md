@@ -587,6 +587,13 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
                 demo_seed.py        replays warm-up history through decide() at startup
                 delegation_chain.py  builds a mandate's chain + containment verdicts
                 delegation_scenarios.py three fixed delegation-chain demo scenarios
+/agent        the governed live shopper agent: a real, tool-calling Groq agent
+              the Sentinel governs live (see `docs/adr/0016-governed-live-agent.md`)
+                catalog.py    fixed fake merchant catalog
+                llm_client.py tool-calling Groq adapter, distinct from reasoning/narrate.py
+                tools.py      the three tools; checkout is the sole integration point
+                shopper.py    the tool-calling loop
+                scenarios.py  four fixed scripted scenarios, verdicts never scripted
 /frontend     single-page ops dashboard (sidebar nav, no router) — a live
               company/organization/agent/session drill-down, a live-demo
               decisions view (wired to a live, configured API service, falls
@@ -597,7 +604,7 @@ Every limitation above is stated in the abstract; [`EXCEPTIONS.md`](EXCEPTIONS.m
 /docs/adr     architecture decision records
 /docs/manifests reproducibility manifests backing this document's own headline
               numbers (see §7, `docs/adr/0015-run-manifests.md`)
-tests/        718 tests, covering every layer above
+tests/        758 tests, covering every layer above
 run_gate.py             command-line entry point for the rules-baseline evaluation
 run_ensemble_eval.py    command-line entry point for the Layer 3 pipeline
 run_full_eval.py        command-line entry point for the full evaluation
@@ -618,6 +625,9 @@ run_delegation_demo_export.py exports the three delegation-chain demo
                         scenarios (real containment verdicts, real narration)
 run_verify_manifest.py command-line entry point verifying a run manifest's
                         recorded inputs against the current working tree
+run_agent_demo_export.py runs the governed live shopper agent's four fixed
+                        scenarios and exports the transcripts (`--fake-llm`
+                        for a scripted, non-live smoke check)
 EXCEPTIONS.md           named categories of sessions this system cannot
                         confidently classify, each reproducible from the
                         evaluation commands above
@@ -633,9 +643,9 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt
 pip install -e ".[dev]"
 
-pytest -q                                              # expect: 718 passed
+pytest -q                                              # expect: 758 passed
 ruff check .                                           # expect: All checks passed!
-mypy mandate common generator detect features eval tests reasoning service containment formal collusion counterfactual escalation interop policy manifest   # expect: Success: no issues found
+mypy mandate common generator detect features eval tests reasoning service containment formal collusion counterfactual escalation interop policy manifest agent   # expect: Success: no issues found
 python run_gate.py --n-legitimate 8000 --seed 42       # rules-baseline evaluation report
 python run_ensemble_eval.py --n-legitimate 20000 --seed 42   # Layer 3 + ensemble report
 python run_full_eval.py --n-legitimate 20000 --seed 42 --manifest-out my.manifest.json   # the full evaluation + its reproducibility manifest
@@ -649,7 +659,7 @@ python run_verify_audit_chain.py --log-path service_audit.jsonl   # tamper-evide
 
 This reproduces every number in [§7](#7-evaluation-results) exactly, including the manifest hash already cited there — `run_full_eval.py --n-legitimate 20000 --seed 42 --manifest-out headline.manifest.json` on a clean clone produces a manifest whose embedded metrics match [`docs/manifests/headline_full_evaluation.manifest.json`](docs/manifests/headline_full_evaluation.manifest.json) field for field (git commit and timestamp aside), confirmed by running it twice independently before that file was committed — see `docs/adr/0015-run-manifests.md`.
 
-Seven of the tests exercise Layer 4's live Groq call and are skipped unless `GROQ_API_KEY` is set (copy `.env.example` to `.env` and fill in a key from [console.groq.com/keys](https://console.groq.com/keys) — the rest of the suite, and the detection pipeline itself, works identically without one; narration alone degrades to a stated placeholder, see §4).
+Eight of the tests make a live Groq call and are skipped unless `GROQ_API_KEY` is set (copy `.env.example` to `.env` and fill in a key from [console.groq.com/keys](https://console.groq.com/keys) — the rest of the suite, and the detection pipeline itself, works identically without one; narration alone degrades to a stated placeholder, see §4). Seven exercise Layer 4's narration call; the eighth exercises the governed live shopper agent's real tool-calling loop (§12, `/agent`).
 
 Running the API service:
 

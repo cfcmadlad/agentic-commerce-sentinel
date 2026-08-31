@@ -56,7 +56,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*", "containment*", "formal*", "collusion*", "counterfactual*", "escalation*", "interop*", "policy*", "manifest*"]
+include = ["mandate*", "common*", "generator*", "features*", "detect*", "reasoning*", "eval*", "service*", "containment*", "formal*", "collusion*", "counterfactual*", "escalation*", "interop*", "policy*", "manifest*", "agent*"]
 
 [tool.ruff]
 line-length = 120

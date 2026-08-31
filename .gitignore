@@ -32,3 +32,4 @@ eval_manifests.jsonl
 # Local tooling config and planning docs — not part of the shipped project.
 /.claude/
 /docs/PROJECT_PLAN.md
+/docs/EXECUTION_BRIEF_AGENT_SPRINT.md

@@ -1,31 +1,37 @@
 /*
  * Design system: dense internal ops dashboard, not a marketing site.
- * Achromatic ink-on-paper base (unchanged from the prior design, already
- * accessible and colorblind-safe) plus muted semantic status colors for
- * fast pre-attentive scanning across dozens of badges/rows per screen --
- * the actual functional reason an ops dashboard uses color at all. Status
- * hue always layers on top of a shape distinction (filled/outlined/plain),
- * never replaces it, so the fallback for a colorblind viewer is unchanged.
+ * Ink-on-parchment base (warmed slightly from the prior pure-white version)
+ * plus a real saturated accent palette drawn from Kurosawa's Ran (1985) --
+ * the film's clan-banner color coding (gold, vermilion, indigo against
+ * muted ash and autumn-grass neutrals) maps directly onto this dashboard's
+ * own verdict taxonomy: blocked reads as vermilion, allowed as indigo,
+ * escalated/warn as gold, and the held-out miss (this project's own
+ * headline finding) gets its own ember accent, distinct from ordinary
+ * blocked, since it is not an ordinary catch. Status hue still always
+ * layers on top of a shape distinction (filled/outlined/plain), never
+ * replaces it, so the fallback for a colorblind viewer is unchanged.
  * Sans-serif throughout; monospace for IDs, scores, and amounts in dense
  * tables -- the one typographic tell that separates a tool from a page.
  */
 
 :root {
   --ink: #17191c;
-  --paper: #ffffff;
-  --mist: #f2f2f3;
-  --fog: #fafafb;
+  --paper: #fffefb;
+  --mist: #f2ede2;
+  --fog: #faf7f1;
   --slate: #777b86;
   --ash: #979799;
   --smoke: #a3a6af;
   --hairline: #ececec;
 
-  --status-blocked: #93321f;
-  --status-blocked-bg: #f8e5e0;
-  --status-allowed: #2c6b45;
-  --status-allowed-bg: #e3f0e6;
-  --status-warn: #8a6414;
-  --status-warn-bg: #f6ecd6;
+  --status-blocked: #a6332a;
+  --status-blocked-bg: #f7e1da;
+  --status-allowed: #2b4a80;
+  --status-allowed-bg: #e3e8f2;
+  --status-warn: #9c6f1e;
+  --status-warn-bg: #f5ead2;
+  --ran-ember: #c94a26;
+  --ran-ember-bg: #f8e2d8;
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -124,6 +130,28 @@ code,
   text-decoration: none;
   color: var(--ink);
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Three-band accent under the wordmark, echoing Ran's clan banners --
+   gold / vermilion / indigo, the same three hues the verdict badges use. */
+.sidebar__brand::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--status-warn) 0%,
+    var(--status-warn) 32%,
+    var(--status-blocked) 34%,
+    var(--status-blocked) 65%,
+    var(--status-allowed) 67%,
+    var(--status-allowed) 100%
+  );
 }
 
 .sidebar__nav {
@@ -204,8 +232,8 @@ code,
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ash);
-  background: var(--mist);
+  color: var(--status-warn);
+  background: var(--status-warn-bg);
   padding: 3px 10px;
   border-radius: var(--radius-pill);
 }
@@ -724,7 +752,7 @@ code,
 }
 
 .ops-terminal__agent {
-  color: #8fd3ff;
+  color: #dbbc74;
   min-width: 90px;
 }
 
@@ -739,11 +767,11 @@ code,
 }
 
 .ops-terminal__verdict {
-  color: #6fcf8e;
+  color: #7f9bd6;
 }
 
 .ops-terminal__verdict--block {
-  color: #e8836f;
+  color: #d97a63;
 }
 
 @keyframes ops-row-in {
@@ -918,7 +946,7 @@ code,
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--status-warn);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
@@ -932,7 +960,7 @@ code,
   height: 16px;
   border: none;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--status-warn);
   cursor: pointer;
 }
 

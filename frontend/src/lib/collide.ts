@@ -52,9 +52,17 @@ export function jitterFor(index: number): number {
   return x - Math.floor(x);
 }
 
+/**
+ * Category color, drawn from the same Ran (1985)-inspired accent trio the
+ * verdict badges use (vermilion/indigo/gold), plus a distinct ember accent
+ * reserved for the held-out miss so it never blends into an ordinary catch.
+ */
 export function colorForCategory(category: string): string {
   if (category === "legitimate") return "#c7c9cd";
-  if (category === "mandate_chaining") return "#e8935f";
+  if (category === "scope_violation") return "#a6332a";
+  if (category === "agent_impersonation") return "#2b4a80";
+  if (category === "mandate_replay") return "#9c6f1e";
+  if (category === "mandate_chaining") return "#c94a26";
   return "#17191c";
 }
 

@@ -87,7 +87,7 @@ export default function ThresholdSparkline({ data }: { data: CollisionData }) {
           x2={thresholdX}
           y1={MARGIN.top}
           y2={HEIGHT - MARGIN.bottom}
-          stroke="#17191c"
+          stroke="#9c6f1e"
           strokeWidth={2}
           style={{ cursor: "ew-resize" }}
         />

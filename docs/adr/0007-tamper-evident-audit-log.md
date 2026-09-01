@@ -140,5 +140,5 @@ access control beyond the filesystem's own), protection against someone who
 rewrites *every* subsequent entry's hashes consistently from a chosen point
 forward with no independent checkpoint to compare against, or multi-process
 write safety (unchanged from the pre-existing, already-disclosed
-no-file-locking tradeoff). README §11 states this plainly rather than
+no-file-locking tradeoff). The README's "Defense-only" section states this plainly rather than
 implying the chain is a stronger guarantee than it is.

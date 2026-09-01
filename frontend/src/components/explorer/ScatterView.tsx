@@ -97,13 +97,13 @@ export default function ScatterView({ data, threshold, onThresholdChange }: Prop
         x2={thresholdX}
         y1={MARGIN.top}
         y2={HEIGHT - MARGIN.bottom}
-        stroke="#17191c"
+        stroke="#9c6f1e"
         strokeWidth={2}
         style={{ cursor: "ew-resize" }}
       />
       <polygon
         points={`${thresholdX - 6},${MARGIN.top} ${thresholdX + 6},${MARGIN.top} ${thresholdX},${MARGIN.top + 10}`}
-        fill="#17191c"
+        fill="#9c6f1e"
       />
     </svg>
   );

@@ -192,7 +192,7 @@ export default function Evaluation() {
                 strokeDasharray="4 3"
                 dot={false}
               />
-              <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#17191c" dot={false} />
+              <Line type="monotone" dataKey="missed_attacks_per_10k" name="missed attacks / 10k" stroke="#a6332a" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -220,7 +220,7 @@ export default function Evaluation() {
                 <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #ececec", fontSize: 12 }} />
                 <Bar dataKey="ensemble_auc_pr" name="ensemble AUC-PR">
                   {[report.sensitivity.baseline_outcome, ...report.sensitivity.outcomes].map((o) => (
-                    <Cell key={o.name} fill={o.beats_baseline ? "#d8d9db" : "#17191c"} />
+                    <Cell key={o.name} fill={o.beats_baseline ? "#2b4a80" : "#a6332a"} />
                   ))}
                 </Bar>
               </BarChart>

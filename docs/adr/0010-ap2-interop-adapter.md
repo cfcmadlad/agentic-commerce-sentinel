@@ -6,7 +6,7 @@ Accepted. Built and tested; a real discrepancy between this project's earlier AP
 
 ## Context
 
-This project's mandate schema has cited AP2 (Google's Agent Payments Protocol) as its reference point since the schema was first written, and README §8 made a specific claim about the fit: that AP2's Intent Mandate "already defines exactly the kind of bounded authorization this project needs: a signed record of spending limits, category constraints, and an expiration." The brief for this milestone required verifying AP2's current field names and mandate structure against the published spec *before* writing anything, and flagging the user if what was found differed from what the brief assumed. It did.
+This project's mandate schema has cited AP2 (Google's Agent Payments Protocol) as its reference point since the schema was first written, and the README's AP2 section made a specific claim about the fit: that AP2's Intent Mandate "already defines exactly the kind of bounded authorization this project needs: a signed record of spending limits, category constraints, and an expiration." The brief for this milestone required verifying AP2's current field names and mandate structure against the published spec *before* writing anything, and flagging the user if what was found differed from what the brief assumed. It did.
 
 ## What was assumed vs. what was found
 
@@ -21,7 +21,7 @@ Fetched directly from the live repository (`google-agentic-commerce/AP2`, `code/
 | (unstated) | AP2 has no delegation-chain concept anywhere in its mandate schema -- this project's entire Layer 2.5 has no AP2 analogue. |
 | (unstated) | AP2 signs via an external Verifiable-Credential scheme (`merchant_authorization`/`user_authorization`, opaque strings), structurally different from this project's raw Ed25519-over-canonical-bytes. |
 
-This is a real, disclosed finding, the same evaluation-honesty standard this project holds its own numbers to (Milestone C's held-out result is the sharpest prior example). README §8 and `mandate/schema.py`'s own module docstring both made the now-corrected claim before this milestone; both were rewritten to state the actual relationship: AP2-*inspired*, independently designed for a reusable, category-scoped, multi-agent-delegation model AP2 does not represent, not an implementation of AP2's own schema.
+This is a real, disclosed finding, the same evaluation-honesty standard this project holds its own numbers to (Milestone C's held-out result is the sharpest prior example). The README's AP2 section and `mandate/schema.py`'s own module docstring both made the now-corrected claim before this milestone; both were rewritten to state the actual relationship: AP2-*inspired*, independently designed for a reusable, category-scoped, multi-agent-delegation model AP2 does not represent, not an implementation of AP2's own schema.
 
 ## Design
 
@@ -62,7 +62,7 @@ Six of ten fields have no AP2 source. `ap2_to_mandate` makes every one of them a
 
 ## Consequences
 
-**Per this project's standing constraint, `detect/`, `features/`, `mandate/verification.py`, `mandate/signing.py`, and the generator were untouched.** `mandate/schema.py`'s own module docstring was corrected (a documentation fix, not a schema or logic change) alongside README §8.
+**Per this project's standing constraint, `detect/`, `features/`, `mandate/verification.py`, `mandate/signing.py`, and the generator were untouched.** `mandate/schema.py`'s own module docstring was corrected (a documentation fix, not a schema or logic change) alongside the README's AP2 section.
 
 **What this buys.** A real, tested, honestly-scoped translation for the fields that do map, and an explicit, un-skippable list of what does not -- useful as a genuine starting point for real AP2 interop, not a demo that would fall over the first time someone checked it against the actual spec.
 

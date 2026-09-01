@@ -20,9 +20,13 @@ const CANVAS_H = 460;
 const CELL_PX = CANVAS_W / GRID_SIZE;
 const MIN_WEIGHT_TO_SHOW = 0.15;
 
+/** Mirrors `lib/collide.ts::colorForCategory`, as RGB triples for canvas fill. */
 function colorFor(category: string): [number, number, number] {
   if (category === "legitimate") return [199, 201, 205];
-  if (category === "mandate_chaining") return [232, 147, 95];
+  if (category === "scope_violation") return [166, 51, 42];
+  if (category === "agent_impersonation") return [43, 74, 128];
+  if (category === "mandate_replay") return [156, 111, 30];
+  if (category === "mandate_chaining") return [201, 74, 38];
   return [23, 25, 28];
 }
 
@@ -69,7 +73,7 @@ export default function TerrainView({ data, threshold }: Props) {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = "#fafafb";
+    ctx.fillStyle = "#faf7f1";
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);

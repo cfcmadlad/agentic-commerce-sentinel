@@ -1,12 +1,10 @@
 /*
  * Design system: dense internal ops dashboard, not a marketing site.
  * Ink-on-parchment base (warmed slightly from the prior pure-white version)
- * plus a real saturated accent palette drawn from Kurosawa's Ran (1985) --
- * the film's clan-banner color coding (gold, vermilion, indigo against
- * muted ash and autumn-grass neutrals) maps directly onto this dashboard's
- * own verdict taxonomy: blocked reads as vermilion, allowed as indigo,
- * escalated/warn as gold, and the held-out miss (this project's own
- * headline finding) gets its own ember accent, distinct from ordinary
+ * plus a saturated vermilion/indigo/gold accent triad mapped directly onto
+ * this dashboard's own verdict taxonomy: blocked reads as vermilion, allowed
+ * as indigo, escalated/warn as gold, and the held-out miss (this project's
+ * own headline finding) gets its own ember accent, distinct from ordinary
  * blocked, since it is not an ordinary catch. Status hue still always
  * layers on top of a shape distinction (filled/outlined/plain), never
  * replaces it, so the fallback for a colorblind viewer is unchanged.

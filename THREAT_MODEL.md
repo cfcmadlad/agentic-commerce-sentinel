@@ -1,6 +1,6 @@
 # Threat model
 
-One page, per layer: what it stops, what it explicitly does not, and why. This is a defense-only system throughout ([README](README.md#defense-only-and-where-this-falls-short)). Nothing here generates, launches, or automates an attack against a real system; the attack generators exist solely to produce synthetic test traffic against this project's own detectors, and every automated finding escalates to a human rather than acting unilaterally.
+One page, per layer: what it stops, what it explicitly does not, and why. This is a defense-only system throughout ([README](README.md#defense-only-and-current-scope)). Nothing here generates, launches, or automates an attack against a real system; the attack generators exist solely to produce synthetic test traffic against this project's own detectors, and every automated finding escalates to a human rather than acting unilaterally.
 
 ## Layer 1: mandate verification (`/mandate`, `mandate/verification.py`)
 
@@ -24,7 +24,7 @@ One page, per layer: what it stops, what it explicitly does not, and why. This i
 
 **Stops:** the two attack variants deliberately constructed to be invisible to Layers 1 and 2 by construction, `rapid_reuse` mandate replay and `behavioral_only` impersonation, by learning session-timing and usage-pattern signal Layers 1-2 have no representation for at all.
 
-**Does not stop, and cannot ever be relied on alone to stop:** anything by itself. It only ever adds a block on top of what Layers 1-2 already allow, never overrides a deterministic rejection ([README](README.md#defense-only-and-where-this-falls-short)). Trained entirely on synthetic session timing; the sensitivity grid found that widening scripted-client pacing to sit inside legitimate jitter halves recall on exactly the two variants this layer exists to catch, at which point it no longer significantly beats the rules-only baseline ([README](README.md#results), [EXCEPTIONS.md](EXCEPTIONS.md)). This is the layer most in need of retraining before any real-world use; real agent traffic will not match this generator's timing distribution.
+**Does not stop, and cannot ever be relied on alone to stop:** anything by itself. It only ever adds a block on top of what Layers 1-2 already allow, never overrides a deterministic rejection ([README](README.md#defense-only-and-current-scope)). Trained entirely on synthetic session timing; the sensitivity grid found that widening scripted-client pacing to sit inside legitimate jitter halves recall on exactly the two variants this layer exists to catch, at which point it no longer significantly beats the rules-only baseline ([README](README.md#results), [EXCEPTIONS.md](EXCEPTIONS.md)). This is the layer most in need of retraining before any real-world use; real agent traffic will not match this generator's timing distribution.
 
 ## Layer 4: reasoning and narration (`/reasoning`, Groq-backed)
 
@@ -48,6 +48,6 @@ One page, per layer: what it stops, what it explicitly does not, and why. This i
 
 **A key compromised and used before revocation.** Revocation is real and checked at decision time, but it is a human action, never automatic. Nothing in this system detects a compromise on its own and triggers revocation itself.
 
-**Real-world distribution shift.** Every number in this document comes from a synthetic generator ([README](README.md#defense-only-and-where-this-falls-short)). The rules layers transfer directly to real data since they are explicit logic, but Layer 3 and the collusion layer are both trained/calibrated on synthetic timing and volume distributions that real agent traffic is not guaranteed to match.
+**Real-world distribution shift.** Every number in this document comes from a synthetic generator ([README](README.md#defense-only-and-current-scope)). The rules layers transfer directly to real data since they are explicit logic, but Layer 3 and the collusion layer are both trained/calibrated on synthetic timing and volume distributions that real agent traffic is not guaranteed to match.
 
 **A compromised deployment process itself.** Nothing here defends the service's own supply chain, host, or secrets management. This is a detection and verification layer sitting in front of a payment flow, not a general application-security posture for whatever infrastructure runs it.

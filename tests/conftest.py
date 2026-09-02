@@ -35,3 +35,11 @@ from dotenv import load_dotenv
 os.environ.setdefault("SENTINEL_RATE_LIMIT_MAX_REQUESTS", "100000")
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass  # truststore is a dev-only workaround for a local TLS-inspecting proxy/AV;
+    # normal reviewer machines resolve certs fine without it

@@ -15,8 +15,9 @@ import type { FullEvaluationReport } from "../types/metrics";
  *     shopper-agent scenarios, each a real tool-calling run whose checkout
  *     verdict came from the real `service.main.decide` plus the real Layer
  *     2.5 containment check. `llm_backend` is always shown, honestly --
- *     this build's export used `--fake-llm` (this machine's local proxy
- *     cannot reach Groq; see the ADR), never presented as if it were live.
+ *     this build's export used a real Groq call (`groq:openai/gpt-oss-120b`);
+ *     `--fake-llm` exists as a fallback for a machine that cannot reach
+ *     Groq (see the ADR) and would be labelled as such here if ever used.
  *   - `formal_properties.json` (`run_verify_policy_properties.py --json-out`)
  *     -- the real Z3 property-by-property result.
  *   - `metrics.json` -- already used elsewhere in this dashboard; reused

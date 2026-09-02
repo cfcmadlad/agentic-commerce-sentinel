@@ -146,14 +146,15 @@ following the same discipline `NarrationInput`/`Narration` already
 established: a value copy at construction time, never a live reference to
 either `counterfactual.deterministic.Counterfactual` or
 `counterfactual.behavioral.BehavioralCounterfactual`, so nothing in this
-package can be threaded back into a decision. `service/main.py::decide`
-computes at most one counterfactual per session: the deterministic one when
-`SOURCE_RULES` blocked it (verification's, if verification itself failed;
-otherwise scope's), the behavioral one when `SOURCE_BEHAVIORAL` did, and
-none for an allowed session. It is returned from `POST /sessions/decide`
-(`counterfactual` field on `SessionDecisionResponse`) and persisted on the
-audit record, readable via `GET /audit/{session_id}` -- both labelled with
-`layer` so a caller always knows which method produced a given explanation.
+package can be threaded back into a decision. **As originally shipped**,
+`service/main.py::decide` computed at most one counterfactual per session:
+the deterministic one when `SOURCE_RULES` blocked it (verification's, if
+verification itself failed; otherwise scope's), the behavioral one when
+`SOURCE_BEHAVIORAL` did, and none for an allowed session -- returned from
+`POST /sessions/decide` and persisted on the audit record, readable via
+`GET /audit/{session_id}`, both labelled with `layer`. **Revised, see the
+addendum below: the behavioral half is no longer wired into `decide()` at
+all.**
 
 ## A real forward-compatibility bug caught before it shipped
 
@@ -200,3 +201,32 @@ separate decision. The Layer 3 search is bounded (a fixed number of
 top-contributing features, a fixed search span per feature) and heuristic;
 "no counterfactual found" is an honest report of this search's limits, not
 a proof that none exists.
+
+## Addendum: behavioral counterfactual pulled out of the live HTTP path, 2026-09-02
+
+On review, attaching a real Layer 3 counterfactual to `POST /sessions
+/decide`'s response was a genuine, if narrow, offense-capability leak: the
+response goes to the same caller whose session was just blocked, and the
+counterfactual's whole content is "change feature X from its real value to
+this suggested value to flip your own verdict to allowed" -- a live
+evasion recipe for that caller's own next attempt, not merely an
+explanation for a separate human reviewer. `GET /audit/{session_id}` is
+equally unauthenticated and would have re-exposed the same thing. The
+deterministic counterfactual carries no equivalent risk (it only restates
+what the presented mandate's own scope already says, nothing the caller
+could not already work out by reading Layer 2's comparison directly), so
+it is unaffected.
+
+Fix: `service/main.py::decide()` no longer calls `counterfactual.
+behavioral.behavioral_counterfactual` at all -- the `SOURCE_BEHAVIORAL`
+branch that used to compute and attach it is removed, along with the
+now-dead `_behavioral_to_schema` conversion helper. A behaviorally-blocked
+session's `counterfactual` field is simply `None`, matching what an
+allowed session already looked like. The library function itself is
+untouched and still fully tested directly
+(`tests/test_counterfactual_behavioral.py`), for a future internal-only
+reviewer tool to call -- gated to library-only use, per this project's own
+defense-only standard, not exposed over HTTP anywhere today. See
+`counterfactual/behavioral.py`'s own module docstring for the fuller
+"why this isn't offense-capable as a technique" reasoning, which stands
+regardless of this wiring decision.

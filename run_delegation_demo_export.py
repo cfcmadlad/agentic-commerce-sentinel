@@ -30,6 +30,14 @@ try:
 except ImportError:
     pass  # python-dotenv is a dev-only dependency; narration stays best-effort without it
 
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass  # dev-only workaround for a local TLS-inspecting proxy/AV; a normal
+    # reviewer machine resolves certs fine without it
+
 from service.delegation_chain import build_delegation_chain
 from service.delegation_scenarios import DelegationScenario, build_delegation_scenarios
 from service.main import decide

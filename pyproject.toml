@@ -47,6 +47,13 @@ dev = [
     # Property-based testing for the delegation-containment invariants --
     # see /tests/test_containment_properties.py and docs/adr/0012.
     "hypothesis==6.167.0",
+    # Verifies TLS certs against the OS native trust store instead of
+    # certifi's bundle. Dev-only workaround for a local TLS-inspecting
+    # proxy/AV that breaks the Groq SDK's HTTPS calls with
+    # CERTIFICATE_VERIFY_FAILED; wired in behind a try/except ImportError
+    # everywhere it's used, so a normal reviewer/deployment machine without
+    # this package installed is unaffected.
+    "truststore==0.10.4",
 ]
 # The dashboard is a static export with no server-side dependencies of its
 # own (see frontend/); nothing further is pinned speculatively here.

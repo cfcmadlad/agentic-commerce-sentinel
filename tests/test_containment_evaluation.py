@@ -132,3 +132,39 @@ def test_formatted_report_states_the_one_shot_framing(fit: PipelineFit) -> None:
     rendered = format_containment_report(report)
     assert "evaluated once" in rendered.lower()
     assert "containment" in rendered.lower()
+
+
+def test_legitimate_delegation_gives_a_real_nonvacuous_fp_measurement(fit: PipelineFit) -> None:
+    """With `n_legitimate_delegation` set, the FP count is a real measurement, not a non-event.
+
+    Unlike `test_containment_never_blocks_legitimate_traffic` above (which
+    covers the default corpus, where no legitimate session ever declares a
+    `parent_mandate_id` and the zero is structural), this corpus adds
+    genuinely in-bounds delegated mandates from `generator.attacks.
+    legitimate_delegation` -- see that module's own zero-false-positive
+    claim in isolation, tested directly in
+    `tests/test_legitimate_delegation.py`. Mixed into this held-out corpus
+    alongside the mandate-chaining attack class, a low, nonzero, and fully
+    explained false-positive count is expected: the two generators
+    independently draw from the same eligible-parent pool, and an
+    accepted `fanout_structuring` attack sibling can (correctly) consume
+    real parent budget a legitimate sibling then finds itself short of --
+    see docs/adr/0004's addendum. Every false positive here must trace to
+    that one already-disclosed mechanism (`sibling_cap_exceeds_parent_
+    remaining`), never to one of the four scope/expiry-subset rules -- if
+    the merchant-ID or any other subset rule ever contributes here, that is
+    a real bug, not the known/disclosed effect.
+    """
+    n_delegation = 200
+    held_out = build_held_out_corpus(_HELD_OUT_SESSIONS, seed=_HELD_OUT_SEED, n_legitimate_delegation=n_delegation)
+    report = run_containment_evaluation(fit, held_out)
+
+    # Sibling-fanout groups can push the realized count above the target --
+    # see generate_legitimate_delegation_sessions's own docstring.
+    assert report.n_legitimate_delegation >= n_delegation
+    total_fp = sum(v.false_positives for v in report.legitimate_delegation_variant_results)
+    assert total_fp == report.containment_false_positives
+    # Generously bounded, not asserted exactly, since it depends on how many
+    # fanout_structuring first-siblings happen to land on a shared parent.
+    assert total_fp / report.n_legitimate_delegation < 0.10
+    assert set(report.legitimate_delegation_reason_counts) <= {"sibling_cap_exceeds_parent_remaining"}

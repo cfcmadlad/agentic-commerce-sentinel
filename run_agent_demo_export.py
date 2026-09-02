@@ -37,6 +37,14 @@ try:
 except ImportError:
     pass  # python-dotenv is a dev-only dependency; --fake-llm works without it
 
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass  # dev-only workaround for a local TLS-inspecting proxy/AV; a normal
+    # reviewer machine resolves certs fine without it
+
 from agent.llm_client import (
     DEFAULT_MODEL,
     AssistantTurn,

@@ -282,7 +282,7 @@
       "narrative": {
         "session_id": "a1a1a1a1-1111-4111-8111-111111111111",
         "verdict_summary": "allowed",
-        "narrative": "The decision to allow the session was based on the fact that no rules fired during the evaluation. The behavioral model produced a score of 0.0000, which is below the operating threshold of 0.0251, so the risk was considered acceptable. Although features such as hours_since_agent_last_session and day_of_week contributed positively toward risk, the overall score remained under the threshold, resulting in an allowed verdict.",
+        "narrative": "The session was allowed because no deterministic rules fired. The calibrated behavioral model produced a score of 0.0000, which is below the operating threshold of 0.0251. Although the features\u202fhours_since_agent_last_session\u202fand\u202fday_of_week\u202fcontributed positively toward risk, the overall score remained low, leading to an allowed decision.",
         "rule_citations": [],
         "feature_citations": [
           "hours_since_agent_last_session",
@@ -292,7 +292,7 @@
           "mandate_prior_use_count"
         ],
         "model": "openai/gpt-oss-120b",
-        "generated_at": "2026-08-30T13:44:24.369548Z"
+        "generated_at": "2026-09-01T19:13:27.114642Z"
       },
       "counterfactual": null
     }
@@ -583,7 +583,7 @@
       "narrative": {
         "session_id": "b2b2b2b2-2222-4222-8222-222222222222",
         "verdict_summary": "allowed",
-        "narrative": "No rule fired for this session, and the calibrated behavioral model produced a score of\u202f0.0000, which is below the operating threshold of\u202f0.0251. The top contributing features listed \u2013\u202fhours_since_agent_last_session, day_of_week, hours_since_mandate_last_use, mandate_prior_use_count, and agent_prior_session_count \u2013 balanced each other out, leaving the overall risk below the threshold. Because no check flagged the activity and the behavioral score was under the limit, the session was allowed.",
+        "narrative": "The session was allowed because no deterministic rule fired during the check. The calibrated behavioral model produced a score of\u202f0.0000, which is below the operating threshold of\u202f0.0251, so the risk was deemed acceptable. Although the features\u202fhours_since_agent_last_session,\u202fday_of_week,\u202fhours_since_mandate_last_use,\u202fmandate_prior_use_count, and\u202fagent_prior_session_count\u202fcontributed to the model\u2019s calculation, their combined effect did not raise the score above the threshold. Consequently, the system did not flag the session as risky.",
         "rule_citations": [],
         "feature_citations": [
           "hours_since_agent_last_session",
@@ -593,7 +593,7 @@
           "agent_prior_session_count"
         ],
         "model": "openai/gpt-oss-120b",
-        "generated_at": "2026-08-30T13:44:27.359481Z"
+        "generated_at": "2026-09-01T19:13:30.159891Z"
       },
       "counterfactual": null
     }
@@ -958,7 +958,7 @@
       "narrative": {
         "session_id": "c3c3c3c3-4444-4444-8444-444444444444",
         "verdict_summary": "allowed",
-        "narrative": "The session was allowed because no deterministic rules fired. The behavioral model produced a score of 0.0000, which is below the operating threshold of 0.0251. Although the features\u202fhours_since_agent_last_session\u202f(+0.3637) and\u202fday_of_week\u202f(+0.2031) pushed the score upward, the overall result remained low, leading to an allowed decision.",
+        "narrative": "The session was allowed because no deterministic rules fired. The calibrated behavioral model returned a score of 0.0000, which is below the operating threshold of 0.0251, indicating low risk. The top contributing features influencing this outcome were hours_since_agent_last_session (+0.3637), day_of_week (+0.2031), hours_since_mandate_last_use (-0.1608), agent_prior_session_count (-0.1382) and mandate_prior_use_count (-0.1348).",
         "rule_citations": [],
         "feature_citations": [
           "hours_since_agent_last_session",
@@ -968,7 +968,7 @@
           "mandate_prior_use_count"
         ],
         "model": "openai/gpt-oss-120b",
-        "generated_at": "2026-08-30T13:44:30.869657Z"
+        "generated_at": "2026-09-01T19:13:33.592175Z"
       },
       "counterfactual": null
     }

@@ -64,6 +64,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--held-out-attack-base-rate", type=float, default=DEFAULT_HELD_OUT_ATTACK_BASE_RATE,
         help="attack fraction for the held-out corpus",
     )
+    parser.add_argument(
+        "--n-legitimate-delegation", type=int, default=0,
+        help="genuinely in-bounds delegated mandates to add to the held-out corpus, for a real "
+        "containment false-positive measurement (see docs/adr/0004's addendum); 0 (default) "
+        "reproduces the original recall-only evaluation exactly",
+    )
     parser.add_argument("--verbose", action="store_true", help="emit progress logging")
     return parser.parse_args(argv)
 
@@ -96,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             args.held_out_n_legitimate,
             seed=args.held_out_seed,
             attack_base_rate=args.held_out_attack_base_rate,
+            n_legitimate_delegation=args.n_legitimate_delegation,
         )
     except ValueError as error:
         print(f"could not build the held-out corpus: {error}", file=sys.stderr)

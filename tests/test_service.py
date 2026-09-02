@@ -259,6 +259,30 @@ def test_audit_record_carries_the_counterfactual(client: TestClient) -> None:
     assert records[0]["counterfactual"] == decided_counterfactual
 
 
+def test_decide_never_imports_the_behavioral_counterfactual_search() -> None:
+    """`service.main` must never wire Layer 3's counterfactual into the live HTTP path.
+
+    Structural, not just behavioral: attaching a real per-session "which
+    feature to change, by how much, to flip this to allowed" recipe to a
+    response this endpoint returns would hand the same caller whose session
+    was just blocked a live evasion recipe for their own next attempt --
+    see `counterfactual/behavioral.py`'s own module docstring and
+    `docs/adr/0008`'s addendum. The library function itself stays fully
+    available and tested directly
+    (`tests/test_counterfactual_behavioral.py`) for a future internal-only
+    reviewer tool; this only pins that `service.main` never reaches it.
+    """
+    import ast
+    import inspect
+
+    import service.main as service_main_module
+
+    tree = ast.parse(inspect.getsource(service_main_module))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "counterfactual.behavioral":
+            pytest.fail(f"service.main imports from counterfactual.behavioral: {ast.dump(node)}")
+
+
 def test_decide_rejects_malformed_request_with_clear_4xx(client: TestClient) -> None:
     """A structurally invalid request body is a 422 with field detail, not a stack trace."""
     response = client.post("/sessions/decide", json={"trace": {"not": "a valid trace"}})
@@ -369,6 +393,34 @@ def test_review_by_system_actor_is_rejected_via_http(client: TestClient) -> None
 
     response = client.post(f"/escalations/{escalation.escalation_id}/review", json={"actor": "system", "note": ""})
     assert response.status_code == 422
+
+
+def test_resolve_by_system_actor_is_rejected_via_http(client: TestClient) -> None:
+    """A resolution claiming the system actor must be rejected too, not just review.
+
+    Completes the bypass-attempt coverage the escalation queue's own
+    `HumanActionRequiredError` guard exists for: `review` and
+    `circuit-breaker/reset` were already covered by name, `resolve` was
+    not. A real, genuinely-reviewed escalation (not skipping straight from
+    open) is required first, matching `test_resolve_without_review_is_a_
+    conflict_via_http`'s own setup, so this test isolates the actor check
+    specifically rather than also exercising the state-machine guard.
+    """
+    state = _app_state(client)
+    agent_id = f"test-agent-{uuid4().hex}"
+    escalation = state.escalation_queue.open_escalation(uuid4(), agent_id, "reason", at=REFERENCE_NOW)
+    escalation_id = str(escalation.escalation_id)
+
+    review_response = client.post(
+        f"/escalations/{escalation_id}/review", json={"actor": "reviewer-1", "note": "checking history"}
+    )
+    assert review_response.status_code == 200
+
+    resolve_response = client.post(
+        f"/escalations/{escalation_id}/resolve",
+        json={"actor": "system", "note": "", "decision": "cleared"},
+    )
+    assert resolve_response.status_code == 422
 
 
 def test_resolve_without_review_is_a_conflict_via_http(client: TestClient) -> None:

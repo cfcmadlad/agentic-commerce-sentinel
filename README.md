@@ -1,10 +1,12 @@
 # Agentic-Commerce Transaction Sentinel
 
+**[Live demo →](https://the-turing-line.vercel.app)** · [OVERVIEW.md](OVERVIEW.md) (five minutes, plain language) · Razorpay AI Buildathon 2026, Track 02
+
 **Proves, mechanically and reproducibly, that an AI agent spending on a human's behalf stayed inside what that human actually authorized. Says so plainly even in the one case where it currently doesn't, because that's the standard the rest of this document holds itself to.**
 
 AP2, ACP, and NPCI's UAP handle how an agent *carries* authorization (a signed intent, a cart, a credential). None of them check whether one specific transaction, or one specific delegation to another agent, actually *stayed inside* it. That's this project's whole job, sitting in front of those protocols, not replacing them.
 
-Built for Razorpay's AI Buildathon 2026, Track 02. **Live: [the-turing-line.vercel.app](https://the-turing-line.vercel.app)**, real evaluation data, a sandbox to build a mandate and try to break it, the governed live agent in action. New here? [`OVERVIEW.md`](OVERVIEW.md) first, five minutes, plain language.
+The live site has real evaluation data, a sandbox to build a mandate and try to break it, and the governed live agent in action.
 
 ### Three minutes, if that's all you have
 
@@ -44,6 +46,8 @@ flowchart TD
     L3 -->|score high| ESC["Escalate to human"]
     L3 -->|score low| L4["4. Reasoning & audit"] --> OUT["Proceeds"]
 ```
+
+**The diagram above is the conceptual decision order, not today's live call graph.** `service.main.decide()`, the API's one per-session decision endpoint, runs Layers 1, 2, and 3 automatically; Layer 2.5 is a real check against the same production `containment` engine, exercised the same way in the evaluation that produces the 76.14% headline number above, but reached today through a separate, explicit call (`GET /mandates/{id}/chain`, or the `/delegation` view), not folded into `decide()`'s own automatic path. A transaction whose own scope is fine can be allowed by `decide()` even while its delegation chain would fail containment, exactly the gap the Operations demo's headline scenario is built to show plainly rather than hide. Named directly, not left implicit: [`THREAT_MODEL.md`](THREAT_MODEL.md#layer-25-delegation-chain-containment-containment) has the full reasoning for leaving it this way this close to submission rather than wiring it in under time pressure.
 
 Also built, each with its own ADR in `docs/adr/`: Z3 formal verification of Layers 1/2/2.5 (`/formal`, 8/8 safety properties proved exhaustively), cross-agent collusion/ring detection (`/collusion`), counterfactual "what would have changed this verdict" explanations (`/counterfactual`), an escalation queue with a circuit breaker (`/escalation`), an AP2 interop adapter (`/interop`), policy-as-code (`/policy`), agent key revocation and rotation, signed run manifests (`/manifest`), and the real tool-calling Groq agent the whole pipeline governs live (`/agent`).
 
@@ -86,7 +90,7 @@ One page per layer, what each stops and doesn't: [`THREAT_MODEL.md`](THREAT_MODE
 python3.12 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-lock.txt && pip install -e ".[dev]"
 
-pytest -q                                                       # 758 passed
+pytest -q                                                       # 772 passed
 python run_full_eval.py --n-legitimate 20000 --seed 42 --manifest-out my.json
 python run_verify_policy_properties.py                          # Z3, expect 8/8 proved
 

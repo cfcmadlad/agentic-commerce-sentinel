@@ -26,6 +26,7 @@ from generator.attack_config import DEFAULT_ATTACK_CONFIG
 from generator.attacks.chaining import generate_mandate_chaining_attacks
 from generator.attacks.common import build_world
 from generator.attacks.corpus import EvaluationCorpus
+from generator.attacks.legitimate_delegation import generate_legitimate_delegation_sessions
 from generator.config import DEFAULT_GENERATOR_CONFIG, GeneratorConfig
 from generator.legitimate import generate_legitimate_sessions
 
@@ -57,12 +58,28 @@ DEFAULT_HELD_OUT_ATTACK_BASE_RATE = 0.15
 # ID that still resolves to conflicting content regardless of this fix.
 SEED_OFFSET_CHAINING = 10_000
 
+# Distinct from both the legitimate generator's own seed (offset 0) and
+# SEED_OFFSET_CHAINING above, for the same reason SEED_OFFSET_CHAINING
+# exists: two independent np.random.default_rng(seed) streams built from
+# colliding seeds can draw the same raw value at different call positions,
+# producing a spurious mandate_id collision. See SEED_OFFSET_CHAINING's own
+# comment for the full account of that failure mode.
+SEED_OFFSET_LEGITIMATE_DELEGATION = 20_000
+
+# Legitimate-delegation sessions default to zero: this corpus's headline
+# purpose (mandate-chaining recall) does not need them, and adding them
+# changes the realized legitimate/attack ratio slightly. Callers measuring
+# containment's false-positive rate (docs/adr/0004's addendum) pass a
+# positive count explicitly.
+DEFAULT_N_LEGITIMATE_DELEGATION = 0
+
 
 def build_held_out_corpus(
     n_legitimate: int,
     seed: int,
     attack_base_rate: float = DEFAULT_HELD_OUT_ATTACK_BASE_RATE,
     generator_config: GeneratorConfig = DEFAULT_GENERATOR_CONFIG,
+    n_legitimate_delegation: int = DEFAULT_N_LEGITIMATE_DELEGATION,
 ) -> EvaluationCorpus:
     """Generates legitimate traffic and mandate-chaining attacks together.
 
@@ -85,6 +102,13 @@ def build_held_out_corpus(
         attack_base_rate: Target attack fraction. Must be in (0, 1).
         generator_config: Legitimate-traffic parameters. Defaults to the
             same parameter set the frozen headline evaluation used.
+        n_legitimate_delegation: Genuinely in-bounds delegated mandates to
+            add, labeled legitimate (`AttackClass.LEGITIMATE`), from
+            `generator.attacks.legitimate_delegation`. Zero by default --
+            see `DEFAULT_N_LEGITIMATE_DELEGATION`. These are the only
+            sessions in this corpus containment can meaningfully
+            false-positive on; every other legitimate session never sets
+            `parent_mandate_id` and so passes containment trivially.
 
     Returns:
         The assembled held-out corpus.
@@ -109,6 +133,13 @@ def build_held_out_corpus(
     world = build_world(legitimate)
 
     attacks = generate_mandate_chaining_attacks(world, n_attacks, seed=seed + SEED_OFFSET_CHAINING)
+    delegations = (
+        generate_legitimate_delegation_sessions(
+            world, n_legitimate_delegation, seed=seed + SEED_OFFSET_LEGITIMATE_DELEGATION
+        )
+        if n_legitimate_delegation > 0
+        else ()
+    )
 
     presented = {}
     for labeled in legitimate.labeled_sessions:
@@ -125,13 +156,21 @@ def build_held_out_corpus(
         elif trace.mandate_id is not None:
             presented[trace.session_id] = legitimate.signed_mandates[trace.mandate_id]
 
-    all_sessions = list(legitimate.labeled_sessions) + [a.labeled for a in attacks]
+    for delegation in delegations:
+        trace = delegation.labeled.trace
+        variant_by_session[trace.session_id] = delegation.variant
+        presented[trace.session_id] = delegation.signed_mandate
+
+    all_sessions = (
+        list(legitimate.labeled_sessions) + [a.labeled for a in attacks] + [d.labeled for d in delegations]
+    )
     all_sessions.sort(key=lambda s: (s.trace.started_at, str(s.trace.session_id)))
 
     realized_rate = len(attacks) / len(all_sessions)
     logger.info(
-        "held-out corpus: %d sessions, %d mandate-chaining attacks, realized base rate %.4f",
-        len(all_sessions), len(attacks), realized_rate,
+        "held-out corpus: %d sessions, %d mandate-chaining attacks, %d legitimate-delegation "
+        "sessions, realized attack base rate %.4f",
+        len(all_sessions), len(attacks), len(delegations), realized_rate,
     )
 
     return EvaluationCorpus(

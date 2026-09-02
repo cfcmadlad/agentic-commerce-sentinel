@@ -53,6 +53,15 @@ export default function Dashboard() {
   return (
     <>
       <section id="overview">
+        <div className="overview-lede">
+          <p className="overview-lede__hook">
+            Tell an AI shopping agent "up to ₹2,000 a month on groceries." Nothing today stops it
+            from spending ₹8,000 on electronics instead — real card, real merchant, no theft
+            anywhere in the story. The agent just didn't stay inside what it was told, and nothing
+            downstream was ever built to ask.
+          </p>
+        </div>
+
         <div className="overview-header">
           <div>
             <h1>Overview</h1>
@@ -69,7 +78,13 @@ export default function Dashboard() {
         {reportError && <div className="panel error-state">Could not load metrics.json: {reportError}</div>}
 
         {report && (
-          <div className="grid-cards">
+          <>
+            <p className="overview-lede__frame">
+              Three of the four numbers below are the pitch. The fourth is a class we tested and
+              missed completely — left in on purpose, because a scoreboard that only shows the
+              wins isn't one worth trusting.
+            </p>
+            <div className="grid-cards">
             <div className="stat-card">
               <div className="stat-card__label">Ensemble AUC-PR</div>
               <div className="stat-card__value">{report.ensemble_scores.auc_pr.point_estimate.toFixed(4)}</div>
@@ -96,7 +111,8 @@ export default function Dashboard() {
               <div className="stat-card__value">0.00%</div>
               <div className="stat-card__sub">99.76% in-distribution — a total, disclosed miss</div>
             </div>
-          </div>
+            </div>
+          </>
         )}
 
         <div className="overview-grid">
@@ -108,8 +124,8 @@ export default function Dashboard() {
           <div className="panel">
             <h2 className="section-title">Where to look next</h2>
             <p className="section-note">
-              <a href="#organizations" onClick={(e) => scrollToSection("organizations", e)}>Organizations</a> — drill
-              from company-wide numbers down to one agent's own sessions.
+              <a href="#operations" onClick={(e) => scrollToSection("operations", e)}>Operations</a> — a real Groq
+              agent tries a budget-inflated delegation, and gets caught mid-attempt.
             </p>
             <p className="section-note">
               <a href="#decisions" onClick={(e) => scrollToSection("decisions", e)}>Decisions</a> — five real

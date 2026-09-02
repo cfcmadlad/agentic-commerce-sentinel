@@ -64,17 +64,56 @@ function useScrollSpy(sectionIds: string[], root: HTMLElement | null): string {
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => el !== null);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting);
-        if (visible.length > 0) {
-          setActiveId(visible[0].target.id);
-        }
-      },
-      { root, rootMargin: "-10% 0px -75% 0px", threshold: 0 },
-    );
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    // Tracks every section's own current intersection state, rather than
+    // trusting one callback batch's array order for "which is active".
+    // IntersectionObserver does not guarantee entries arrive in document
+    // order -- on the very first observe() call for several elements at
+    // once (page load, or a fast scroll), more than one section can be
+    // simultaneously intersecting, and taking entries[0] picked whichever
+    // one the browser happened to report first, not necessarily the
+    // topmost. Recomputing "the topmost currently-intersecting section, in
+    // sectionIds order" on every callback is correct regardless of
+    // delivery order.
+    const isIntersecting = new Map<string, boolean>(sectionIds.map((id) => [id, false]));
+    let observer: IntersectionObserver | null = null;
+
+    // Below the mobile breakpoint, `.app-content` switches to
+    // `overflow-y: visible` (the window scrolls instead -- see index.css's
+    // 768px media query); it stops being a real scroll container. Using it
+    // as the IntersectionObserver root regardless made rootMargin's
+    // percentages relative to its full, unclipped scrollHeight (thousands
+    // of pixels) instead of the real visible viewport, silently breaking
+    // every boundary calculation -- reproduced concretely: Organizations
+    // stayed highlighted while Overview's own content filled the screen.
+    // Falling back to the true viewport (root: null) whenever `root` isn't
+    // currently clipping its own overflow fixes this at whatever
+    // breakpoint the CSS uses, not just today's 768px value. Reconnects on
+    // resize since crossing that breakpoint changes the CSS but not this
+    // effect's own dependencies.
+    const connect = (): void => {
+      observer?.disconnect();
+      const clipsOverflow = getComputedStyle(root).overflowY !== "visible";
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            isIntersecting.set(entry.target.id, entry.isIntersecting);
+          }
+          const topmost = sectionIds.find((id) => isIntersecting.get(id));
+          if (topmost !== undefined) {
+            setActiveId(topmost);
+          }
+        },
+        { root: clipsOverflow ? root : null, rootMargin: "-10% 0px -75% 0px", threshold: 0 },
+      );
+      elements.forEach((el) => observer!.observe(el));
+    };
+
+    connect();
+    window.addEventListener("resize", connect);
+    return () => {
+      window.removeEventListener("resize", connect);
+      observer?.disconnect();
+    };
   }, [sectionIds, root]);
 
   return activeId;
@@ -126,6 +165,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="app-main">
         <div className="app-topbar">
           <span className="app-topbar__badge">Synthetic data · demo</span>
+          <a
+            href="https://github.com/cfcmadlad/agentic-commerce-sentinel"
+            target="_blank"
+            rel="noreferrer"
+            className="app-topbar__repo-link"
+          >
+            View source ↗
+          </a>
         </div>
         <div className="app-content" ref={contentRef}>
           {children}

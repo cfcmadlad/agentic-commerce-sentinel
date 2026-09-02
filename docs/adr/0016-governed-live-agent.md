@@ -171,6 +171,9 @@ panels:
    machine's local proxy cannot reach Groq -- the same
    `CERTIFICATE_VERIFY_FAILED` characteristic already documented for the
    seven pre-existing live-Groq tests), never presented as if it were live.
+   Superseded: see the addendum at the end of this document -- the
+   connectivity problem is fixed and the committed export is real Groq
+   output now.
 2. `.ops-terminal`, a live-feeling replay feed. Not live traffic (this
    hosted build has no backend to stream from) -- a genuinely ticking list
    replaying real `collision.json` sessions (already-exported, already used
@@ -235,3 +238,21 @@ horizontal-collapse behavior (unmodified) still fits the new nav entry.
 - The Operations view is recorded-only, no live-HTTP mode, since `checkout`
   itself has none -- adding one to either would be a real, separate future
   decision, not a Phase 2 afterthought.
+
+## Addendum: fake-LLM export replaced with real Groq, 2026-09-02
+
+The connectivity problem behind the original `--fake-llm` export was a
+local TLS-trust issue, not a Groq outage: the same `CERTIFICATE_VERIFY_
+FAILED` characteristic already documented for the seven pre-existing
+live-Groq tests, root-caused to this development machine's local
+TLS-inspecting antivirus/proxy not being in the OS-native trust store
+`certifi`'s bundle checks against. Fixed by wiring `truststore.
+inject_into_ssl()` in ahead of Groq client construction (`tests/conftest
+.py`, `run_agent_demo_export.py`, `run_delegation_demo_export.py`), each
+guarded behind a `try/except ImportError` so a reviewer machine without
+this local condition is unaffected either way; `truststore==0.10.4` is now
+a real, pinned dev dependency rather than an ad hoc, unpinned local
+workaround. `agent_demo.json` was regenerated against the real API
+immediately after: all four scenarios now carry `llm_backend:
+"groq:openai/gpt-oss-120b"`, confirmed by inspecting the committed export
+directly, not assumed from this fix alone.

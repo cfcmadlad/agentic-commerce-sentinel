@@ -132,11 +132,14 @@ command.
 
 76.14% ensemble recall overall (rules-only, matching `docs/adr/0003`, stays
 at 0.00% since containment is a new deterministic layer, not a change to
-Layers 1 or 2). Zero false positives on legitimate traffic -- verified by
-direct measurement (`containment_false_positives` in the evaluation report),
-not asserted: no legitimate mandate this project's generator produces ever
-declares a `parent_mandate_id`, so containment structurally cannot fire on
-one.
+Layers 1 or 2). Zero false positives on legitimate traffic in the default
+held-out corpus -- verified by direct measurement
+(`containment_false_positives` in the evaluation report), not asserted: no
+legitimate mandate this project's generator produces ever declares a
+`parent_mandate_id`, so containment structurally cannot fire on one. **That
+measurement was, on its own, a structural non-event, not a real test of
+containment's false-positive behavior -- see the addendum below for the
+real one.**
 
 | Variant | n | Rules-only | Rules+containment | Full stack |
 |---|---|---|---|---|
@@ -226,3 +229,79 @@ containment strategy (batching sibling decisions rather than deciding them
 one at a time) or a Layer 3 feature representing an agent's own fan-out
 rate, which does not currently exist. Neither is addressed here, matching
 the discipline this layer was itself built to demonstrate.
+
+## Addendum: a real false-positive measurement, 2026-09-02
+
+The "zero false positives" claim above was true but measured nothing: this
+project's generator never produces a legitimate mandate with
+`parent_mandate_id` set, so containment structurally cannot fire on the
+default held-out corpus regardless of whether the rules are actually
+correct. `generator/attacks/legitimate_delegation.py` closes that gap: a
+new generator producing genuinely in-bounds delegated mandates (narrower
+child than parent on every dimension `_check_scope_subset` checks, both
+with and without an explicit child merchant allowlist, plus a legitimate
+sibling-fanout shape whose combined ceiling stays comfortably under its
+parent's cap) -- the same shapes the mandate-chaining attack variants
+distort, but never distorted. `run_containment_eval.py --n-legitimate-
+delegation N` adds `N` of these to the held-out corpus.
+
+**In isolation** (this generator's own output, scored against the real
+`ContainmentGate`, with no attack corpus sharing the parent pool):
+**0 false positives** out of 3,000 sessions, confirmed directly (not
+inferred) and pinned by
+`tests/test_legitimate_delegation.py::test_zero_false_positives_against_the_real_containment_gate`.
+None of the five containment rules -- including the merchant-ID subset
+check, the likeliest suspect for a `child=None`-under-a-restricted-parent
+false positive -- ever fired incorrectly. No rule needed changing.
+
+**Mixed into the full held-out corpus** alongside the mandate-chaining
+attack class (`run_containment_eval.py --n-legitimate 20000 --seed 42
+--held-out-n-legitimate 20000 --held-out-seed 90042
+--n-legitimate-delegation 3000`): **65 false positives out of 3,000**
+(2.17%), **100% attributed to `sibling_cap_exceeds_parent_remaining`**,
+zero from any scope/expiry subset rule. Root cause, confirmed by
+comparison against the isolated measurement above (not assumed): the
+legitimate-delegation generator and the mandate-chaining attack generator
+independently draw parents from the same eligible pool. Where an accepted
+`fanout_structuring` first sibling (the already-disclosed, un-caught 24.54%
+residual documented above and in `EXCEPTIONS.md` §1) happens to share a
+parent with a legitimate delegation, that attacker's sibling has genuinely
+already consumed part of the parent's real remaining capacity by the time
+the legitimate one is decided -- containment correctly rejects the
+legitimate one for exceeding what the parent actually has left. This is
+the sibling-cap rule doing exactly its job under real resource contention,
+not a bug: fixing it would mean letting a delegation through that would
+push a parent's committed total over its own declared cap, which is the
+one invariant this rule exists to hold. It is a downstream, disclosable
+restatement of the already-known `fanout_structuring` gap, not a new one,
+and is reported here rather than patched reactively, per this project's
+own standing methodology (`docs/adr/0003`).
+
+**Fresh-seed generalization check, rules completely unchanged.** The five
+containment rules were fixed before any evaluation ran, but they were
+designed by someone who had read the held-out variant taxonomy in advance
+-- a close-enough resemblance between rules and variants that it is worth
+checking the 76.14% figure isn't an artifact of one particular held-out
+seed. Regenerated the held-out corpus at a fresh seed
+(`--held-out-seed 123456`, versus the frozen `90042`), same `n_legitimate
+=20000`, same fitting corpus, containment rules byte-for-byte unchanged:
+overall recall **75.01%** (vs. 76.14% at the original seed), per-variant
+`budget_escalation`/`breadth_escalation`/`temporal_outlive` still 100.00%
+across all three, `fanout_structuring` 75.98% (vs. 75.46%),
+`unauthorized_subdelegation` 1.48% (vs. 2.59%). Every difference is small
+and in the direction ordinary seed-to-seed sampling variance would produce,
+not a cliff -- the finding is disclosed as measured, not tuned toward.
+
+One side effect worth naming: mixing legitimate-delegation traffic into the
+held-out corpus changes the sibling-cap ledger's processing order for the
+whole corpus (it is a single running ledger over chronologically-sorted
+sessions), which measurably shifts the mandate-chaining recall numbers
+(`fanout_structuring` 75.46%→76.49%, `unauthorized_subdelegation`
+2.59%→7.55% in one run) relative to the frozen headline. The headline
+76.14% figure is unaffected -- it is always measured at
+`--n-legitimate-delegation 0` (the default), confirmed byte-identical to
+the original run above -- but a report combining both numbers must not
+present the shifted recall as the headline. `tests/test_containment_
+evaluation.py::test_legitimate_delegation_gives_a_real_nonvacuous_fp_measurement`
+pins the false-positive-attribution claim (only `sibling_cap_exceeds_
+parent_remaining`, low rate) as a regression test.

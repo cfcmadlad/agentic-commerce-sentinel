@@ -36,7 +36,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from common.schema import SessionTrace
-from counterfactual.behavioral import BehavioralCounterfactual, behavioral_counterfactual
 from counterfactual.deterministic import Counterfactual as DeterministicCounterfactual
 from counterfactual.deterministic import scope_counterfactual, verification_counterfactual
 from detect.attribution import compute_attribution
@@ -412,27 +411,6 @@ def _deterministic_to_schema(cf: DeterministicCounterfactual) -> Counterfactual:
     )
 
 
-def _behavioral_to_schema(cf: BehavioralCounterfactual) -> Counterfactual:
-    """Converts a `counterfactual.behavioral.BehavioralCounterfactual` to its audit/wire form.
-
-    Args:
-        cf: The counterfactual to convert.
-
-    Returns:
-        The equivalent `reasoning.schema.Counterfactual`, formatting each
-        edit's numeric values to four decimal places, matching
-        `reasoning.narrate`'s own SHAP-value formatting convention.
-    """
-    return Counterfactual(
-        layer="layer3_behavioral",
-        feasible=cf.feasible,
-        edits=tuple(
-            CounterfactualEdit(e.feature, f"{e.real_value:.4f}", f"{e.suggested_value:.4f}") for e in cf.edits
-        ),
-        explanation=cf.explanation,
-    )
-
-
 def _circuit_breaker_response(trace: SessionTrace, state: AppState) -> SessionDecisionResponse:
     """Builds the short-circuited response for a session from a suspended agent.
 
@@ -553,6 +531,17 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
         attribution_result = compute_attribution(state.model, design_matrix)
         attribution_out = attribution_row_to_out(attribution_result, 0)
 
+    # Layer 3's counterfactual (counterfactual.behavioral) is deliberately not
+    # computed here, even though the library function exists and is tested
+    # directly (tests/test_counterfactual_behavioral.py). Every response this
+    # endpoint returns is HTTP-reachable, including by the same caller whose
+    # session was just blocked -- attaching a real per-session "which feature
+    # to change, by how much, to flip this to allowed" recipe to that
+    # response would hand that caller a live evasion recipe for their own
+    # next attempt, not just an explanation. The deterministic counterfactual
+    # below carries no equivalent risk: it restates what the mandate already
+    # says, nothing about the caller could not already read off Layer 2's
+    # own comparison. See docs/adr/0008's disclosure note.
     counterfactual: Counterfactual | None = None
     if ensemble.blocked and ensemble.source == SOURCE_RULES:
         det_cf = None
@@ -564,13 +553,6 @@ def decide(payload: DecideRequest, state: AppState = Depends(get_state)) -> Sess
             det_cf = scope_counterfactual(trace, signed)
         if det_cf is not None:
             counterfactual = _deterministic_to_schema(det_cf)
-    elif ensemble.blocked and ensemble.source == SOURCE_BEHAVIORAL:
-        assert attribution_result is not None  # SOURCE_BEHAVIORAL implies Layer 3 was consulted
-        behavioral_cf = behavioral_counterfactual(
-            state.model, design_matrix, attribution_result, row_index=0, threshold=state.threshold
-        )
-        if behavioral_cf is not None:
-            counterfactual = _behavioral_to_schema(behavioral_cf)
 
     narrative_out = None
     if state.narration_client is not None:

@@ -32,6 +32,30 @@ features). `has_catalog_browse`, `has_cart_build`, `has_mandate_presented`,
 and `presented_a_mandate` are boolean flags, tested only as a single flip
 (0 to 1 or the reverse), never bisected as if a fractional value between
 them meant anything.
+
+Why this is defense-only, stated explicitly rather than left implicit
+(this project's own stated disqualification criterion is anything
+offense-capable, so this needs to hold up to direct scrutiny). This
+module does three things a genuinely offense-capable tool would not:
+
+1. It only ever operates on a session that has already been decided, by
+   the real pipeline, in the caller's own process -- never a live query
+   against a running detector it does not already have the verdict for.
+   There is no code path from here back into the attack generator
+   (`generator/attacks/`), and no path that takes attacker-chosen input
+   and asks "would this evade detection" before a real decision exists.
+2. `bisect_search` (below) explores exactly one already-flagged session's
+   own feature vector, one feature at a time, to explain that specific
+   verdict to a human reviewer -- it is not a general search for evasive
+   parameter regions across the model's input space, and produces nothing
+   reusable against a session it was not given.
+3. `service/main.py::decide()` deliberately never calls this module (see
+   the comment at its own counterfactual-assembly call site) -- the one
+   thing that WOULD make this offense-capable is handing a live "how to
+   evade" recipe back to the same caller whose session was just blocked,
+   over the one HTTP surface that caller can reach. Library-only, for a
+   human reviewer working from an already-recorded audit entry, is the
+   only use this module is wired for today.
 """
 
 from __future__ import annotations

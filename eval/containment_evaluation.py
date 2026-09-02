@@ -68,6 +68,21 @@ class ContainmentVariantResult:
 
 
 @dataclass(frozen=True)
+class LegitimateDelegationVariantResult:
+    """Containment's false-positive behavior on one legitimate-delegation shape.
+
+    Attributes:
+        variant: The `generator.attacks.legitimate_delegation` variant name.
+        total: Legitimate delegation sessions of this shape in the corpus.
+        false_positives: How many of them containment incorrectly blocked.
+    """
+
+    variant: str
+    total: int
+    false_positives: int
+
+
+@dataclass(frozen=True)
 class ContainmentEvaluationReport:
     """The full one-shot Layer 2.5 evaluation result.
 
@@ -82,10 +97,20 @@ class ContainmentEvaluationReport:
         containment_reason_counts: How often each `ContainmentViolationReason`
             fired, across every attack session containment blocked.
         containment_false_positives: Legitimate sessions containment blocked.
-            Expected to be exactly zero: containment only ever fires on a
-            mandate that declares a `parent_mandate_id`, and no legitimate
-            mandate in this project's generator ever does -- reported as a
-            measured count, not asserted, so the claim is falsifiable.
+            Every legitimate session that never sets `parent_mandate_id`
+            (the ordinary legitimate corpus) passes containment trivially
+            and can never contribute here -- this count is only ever
+            non-zero from real, genuinely in-bounds delegated mandates (see
+            `n_legitimate_delegation` and `legitimate_delegation_variant_
+            results`), which is what makes it a real measurement rather
+            than a structural non-event.
+        n_legitimate_delegation: Genuinely in-bounds delegated mandates in
+            this corpus (0 unless the caller requested them).
+        legitimate_delegation_variant_results: Per-shape false-positive
+            breakdown for the legitimate-delegation population specifically.
+        legitimate_delegation_reason_counts: How often each
+            `ContainmentViolationReason` fired on a legitimate-delegation
+            session containment incorrectly blocked.
     """
 
     n_sessions: int
@@ -96,6 +121,9 @@ class ContainmentEvaluationReport:
     variant_results: tuple[ContainmentVariantResult, ...]
     containment_reason_counts: dict[str, int]
     containment_false_positives: int
+    n_legitimate_delegation: int
+    legitimate_delegation_variant_results: tuple[LegitimateDelegationVariantResult, ...]
+    legitimate_delegation_reason_counts: dict[str, int]
 
 
 def run_containment_evaluation(
@@ -143,6 +171,7 @@ def run_containment_evaluation(
     # Layer 3 is skipped for the same reason elsewhere in this pipeline.
     containment_blocked = np.zeros(len(sessions), dtype=bool)
     reason_counts: Counter[str] = Counter()
+    blocked_reasons: dict[int, tuple[str, ...]] = {}
     for i, session in enumerate(sessions):
         if rules_blocked[i]:
             continue
@@ -152,8 +181,10 @@ def run_containment_evaluation(
         result = gate.decide(signed.mandate)
         containment_blocked[i] = not result.in_bounds
         if not result.in_bounds:
-            for reason in result.reasons:
-                reason_counts[reason.value] += 1
+            reasons_this = tuple(reason.value for reason in result.reasons)
+            blocked_reasons[i] = reasons_this
+            for reason_value in reasons_this:
+                reason_counts[reason_value] += 1
 
     rules_or_containment_blocked = rules_blocked | containment_blocked
 
@@ -204,6 +235,36 @@ def run_containment_evaluation(
         for variant, total in sorted(variant_totals.items())
     )
 
+    # Legitimate-delegation false positives, broken down by shape. An
+    # ordinary legitimate session never appears in `variant_by_session`
+    # (only attack sessions and legitimate-delegation sessions do), so this
+    # loop only ever sees the population containment can meaningfully
+    # false-positive on -- see `ContainmentEvaluationReport.
+    # containment_false_positives`'s own docstring.
+    legit_delegation_totals: Counter[str] = Counter()
+    legit_delegation_fps: Counter[str] = Counter()
+    legit_delegation_reason_counts: Counter[str] = Counter()
+    n_legitimate_delegation = 0
+    for i, session in enumerate(sessions):
+        if session.is_attack:
+            continue
+        delegation_variant = held_out_corpus.variant_by_session.get(session.trace.session_id)
+        if delegation_variant is None:
+            continue
+        n_legitimate_delegation += 1
+        legit_delegation_totals[delegation_variant] += 1
+        if containment_blocked[i]:
+            legit_delegation_fps[delegation_variant] += 1
+            for reason_value in blocked_reasons.get(i, ()):
+                legit_delegation_reason_counts[reason_value] += 1
+
+    legitimate_delegation_variant_results = tuple(
+        LegitimateDelegationVariantResult(
+            variant=variant, total=total, false_positives=legit_delegation_fps[variant]
+        )
+        for variant, total in sorted(legit_delegation_totals.items())
+    )
+
     logger.info(
         "containment evaluation: rules_recall=%.4f rules_containment_recall=%.4f full_recall=%.4f "
         "false_positives=%d",
@@ -219,6 +280,9 @@ def run_containment_evaluation(
         variant_results=variant_results,
         containment_reason_counts=dict(reason_counts),
         containment_false_positives=containment_false_positives,
+        n_legitimate_delegation=n_legitimate_delegation,
+        legitimate_delegation_variant_results=legitimate_delegation_variant_results,
+        legitimate_delegation_reason_counts=dict(legit_delegation_reason_counts),
     )
 
 
@@ -258,4 +322,23 @@ def format_containment_report(report: ContainmentEvaluationReport) -> str:
             lines.append(f"  {reason:<40} {count}")
     else:
         lines.append("  (none fired)")
+
+    lines.append("")
+    lines.append(
+        f"  legitimate-delegation sessions (genuinely in-bounds, real FP-measurement "
+        f"population) {report.n_legitimate_delegation}"
+    )
+    if report.n_legitimate_delegation:
+        lines.append("  false positives by shape:")
+        for lv in report.legitimate_delegation_variant_results:
+            rate = _safe_ratio(lv.false_positives, lv.total) * 100
+            lines.append(
+                f"    {lv.variant:<28} n={lv.total:<4} false_positives={lv.false_positives} ({rate:.2f}%)"
+            )
+        lines.append("  reasons fired on those false positives:")
+        if report.legitimate_delegation_reason_counts:
+            for reason, count in sorted(report.legitimate_delegation_reason_counts.items()):
+                lines.append(f"    {reason:<40} {count}")
+        else:
+            lines.append("    (none fired)")
     return "\n".join(lines)

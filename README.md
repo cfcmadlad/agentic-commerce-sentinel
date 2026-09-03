@@ -24,7 +24,7 @@ AP2, ACP, and NPCI's UAP handle how an agent *carries* authorization. None of th
 
 Tell an agent "spend up to ₹2,000/month on groceries," and it spends ₹8,000 on electronics instead. Every classical fraud signal is clean: real card, real merchant, real device, nothing stolen. The agent just did something nobody authorized, and no fraud system asks that question, because until agents could spend on their own, "a human clicked buy" and "a human authorized this" were the same fact.
 
-Razorpay's own stack doesn't cover it either: Vulcan scores transactions, not the authorization behind them; Bumblebee reviews merchants, not agent sessions; Agent Studio's tools are post-hoc. This sits in front of all three, checking authorization *before* the transaction, not after.
+Razorpay's own fraud tooling doesn't cover it either: it scores transactions and reviews merchants after the fact, not whether an agent's action stayed inside what a human actually authorized before it happened. This sits in front of that, checking authorization *before* the transaction, not after.
 
 ## Architecture
 

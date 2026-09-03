@@ -110,7 +110,7 @@ export default function About() {
           asks that question, because it was never built to.
         </p>
         <p>
-          Razorpay and NPCI have already launched AI agents that complete UPI purchases on a user's
+          Razorpay has already piloted AI agents that complete UPI purchases on a user's
           behalf without a human confirming each one — this is not a hypothetical scenario. This
           project sits in front of the payment and asks the second question instead: does this
           specific purchase match what the human actually agreed to?

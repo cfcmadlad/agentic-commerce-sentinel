@@ -14,7 +14,7 @@ That gap, an AI agent acting for a human and quietly stepping outside the bounda
 
 ## Why this is a new problem, not an old one with a new label
 
-Until recently, a human clicked "buy" on every purchase, so "is this transaction legitimate" and "did a human agree to this" were the same question. Agentic commerce breaks that: Razorpay and NPCI have already launched AI agents that can complete UPI payments without a human confirming each one. Once an agent can spend on its own, "did a human agree to this specific purchase" stops being answerable by watching the card, the device, or the merchant. It requires actually checking the agent's authorization against what it's doing, a question existing fraud infrastructure was never built to ask.
+Until recently, a human clicked "buy" on every purchase, so "is this transaction legitimate" and "did a human agree to this" were the same question. Agentic commerce breaks that: Razorpay has already piloted AI agents that can complete UPI payments without a human confirming each one. Once an agent can spend on its own, "did a human agree to this specific purchase" stops being answerable by watching the card, the device, or the merchant. It requires actually checking the agent's authorization against what it's doing, a question existing fraud infrastructure was never built to ask.
 
 ## What's actually built to check this
 

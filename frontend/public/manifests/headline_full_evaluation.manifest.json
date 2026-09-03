@@ -13,10 +13,10 @@
     "bootstrap_seed": 42,
     "pipeline_random_state": 42
   },
-  "git_commit": "139d37e1d4337cf819f37f2a0a95907b15321387",
-  "working_tree_dirty": true,
-  "dependency_lock_hash": "dda310aca224f36322d0cc1eb9a27e24dadb9cc588c161b597096f4a6a3e127a",
-  "generated_at": "2026-08-30T18:39:40.294617+00:00",
+  "git_commit": "f8c30652cf11d31371c1e58b40c30b432e30e305",
+  "working_tree_dirty": false,
+  "dependency_lock_hash": "18d7b49fa6cb5037076ee2dc7f8f834562c332d5f519e47fb44f9e900fff8059",
+  "generated_at": "2026-09-03T19:59:14.630785+00:00",
   "metrics": {
     "n_sessions": 20833,
     "n_test": 4168,
@@ -3547,13 +3547,13 @@
       "n_decisions": 2950,
       "n_warmup": 50,
       "percentiles": {
-        "50.0": 2.75565,
-        "95.0": 3.425679999999999,
-        "99.0": 3.9736919999999953
+        "50.0": 2.7885,
+        "95.0": 4.162274999999993,
+        "99.0": 6.510367999999992
       },
-      "minimum_ms": 1.5375,
-      "maximum_ms": 61.8118,
-      "mean_ms": 2.8073862372881355
+      "minimum_ms": 1.7944,
+      "maximum_ms": 34.9245,
+      "mean_ms": 2.893797220338983
     },
     "sensitivity": {
       "baseline_outcome": {

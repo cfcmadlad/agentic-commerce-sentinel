@@ -105,7 +105,7 @@ python run_ensemble_eval.py --n-legitimate 20000 --seed 42
 
 **What it is.** Not a currently observed failure. A documented condition under which Layer 3's
 confidence would collapse if real agentic traffic turns out to look like it. A sensitivity sweep
-(README, Generator parameter sensitivity) widens the scripted-client inter-event pacing that defines `behavioral_only` and
+(README, evaluation detail) widens the scripted-client inter-event pacing that defines `behavioral_only` and
 `rapid_reuse` from the established 20-second maximum to 35 seconds, pushing it almost entirely inside
 the legitimate traffic's own 2-45 second jitter range.
 
@@ -121,9 +121,9 @@ outperforms the rules-only baseline at that grid point. AUC-PR barely moves (-0.
 recall figure halves, so AUC-PR alone would not have surfaced this.
 
 **What would resolve it.** Measuring real agentic inter-event timing before relying on this
-project's pacing-based features for production detection. This is the same conclusion the README's
-"Defense-only" section already names as the biggest open question for real-world transfer, restated here as a named
-exception category rather than a general caveat.
+project's pacing-based features for production detection. This is the same fact restated here as a
+named exception category rather than a general caveat: real-world transfer is Layer 3's biggest open
+question, not this project's rules layers, which are explicit logic and transfer directly.
 
 **Reproduce with:**
 ```bash

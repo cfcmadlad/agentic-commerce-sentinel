@@ -62,7 +62,7 @@ Also built, each with its own ADR: Z3 formal verification (`/formal`, 8/8 proper
 | Rules only | 1.00 | 0.83 | 0.85 |
 | Full ensemble | 0.98 | 1.00 | **0.9982** |
 
-McNemar p ≈ 1.4×10⁻¹² vs. the rules-only baseline. Reproduces from `python run_full_eval.py --n-legitimate 20000 --seed 42`; signed receipt at [`docs/manifests/headline_full_evaluation.manifest.json`](docs/manifests/headline_full_evaluation.manifest.json), hash `c544e6a4…0943a6`.
+McNemar p ≈ 1.4×10⁻¹² vs. the rules-only baseline. Reproduces from `python run_full_eval.py --n-legitimate 20000 --seed 42`; signed receipt at [`docs/manifests/headline_full_evaluation.manifest.json`](docs/manifests/headline_full_evaluation.manifest.json), hash `64e55263…5275ba`.
 
 **Held out class** (mandate chaining: an agent bootstraps a bigger unauthorized action off a small legitimate one, withheld from training, tested once): 0% recall before the fix, **76% after** a new containment layer built specifically for it. What's still open is named, not smoothed over: `docs/adr/0003`, `docs/adr/0004`.
 

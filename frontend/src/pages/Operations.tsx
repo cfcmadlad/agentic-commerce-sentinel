@@ -284,7 +284,7 @@ function ProofPanel({
           This project's headline evaluation numbers (see the README's Results section) are certified by a committed run
           manifest -- every seed, the git commit, the dependency-lock hash, and the resulting metrics,
           confirmed to reproduce byte-for-byte across two independent runs before it was cited. Content
-          hash <span className="mono">c544e6a4…0943a6</span>. <a href="/manifests/headline_full_evaluation.manifest.json">View the manifest</a>.
+          hash <span className="mono">64e55263…5275ba</span>. <a href="/manifests/headline_full_evaluation.manifest.json">View the manifest</a>.
         </p>
       </div>
     </div>

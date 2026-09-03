@@ -105,7 +105,7 @@ python run_ensemble_eval.py --n-legitimate 20000 --seed 42
 
 **What it is.** Not a currently observed failure. A documented condition under which Layer 3's
 confidence would collapse if real agentic traffic turns out to look like it. A sensitivity sweep
-(README, Results) widens the scripted-client inter-event pacing that defines `behavioral_only` and
+(README, Generator parameter sensitivity) widens the scripted-client inter-event pacing that defines `behavioral_only` and
 `rapid_reuse` from the established 20-second maximum to 35 seconds, pushing it almost entirely inside
 the legitimate traffic's own 2-45 second jitter range.
 

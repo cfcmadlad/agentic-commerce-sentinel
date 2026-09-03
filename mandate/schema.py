@@ -14,9 +14,9 @@ model needs to match, since it was designed independently for a reusable,
 category-scoped, multi-agent-delegation authorization AP2 does not
 represent. Where UAP's reported design is known -- per-merchant spending
 limits, consent-based delegation built on UPI Circle -- this schema
-follows that direction anyway. See README §8 and the interop ADR for the
-full sourcing; this is a defensible design point, not a claim of
-conformance to either spec.
+follows that direction anyway. See the README's AP2/UAP section and the
+interop ADR for the full sourcing; this is a defensible design point, not
+a claim of conformance to either spec.
 
 A `Mandate` is the unsigned content. A `SignedMandate` wraps it with the
 Ed25519 signature and the key identifier that produced it. Verification

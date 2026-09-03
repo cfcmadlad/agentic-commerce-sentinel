@@ -5,8 +5,8 @@ in file-append mode. Weighed against an in-memory list:
 
 - A file survives process restart and is directly human-reviewable (`cat`,
   `grep`, `jq`) with no special tooling -- consistent with this project's
-  "every decision ... is human-reviewable" claim (README Section 3) in a
-  way a process-local list cannot be, since the list vanishes with the
+  "every decision ... is human-reviewable" claim (see THREAT_MODEL.md) in
+  a way a process-local list cannot be, since the list vanishes with the
   process.
 - Append-only is enforced by the interface, not by convention: `AuditLog`
   exposes exactly `append`, `read_all`, and `read_entries` -- no `update`,

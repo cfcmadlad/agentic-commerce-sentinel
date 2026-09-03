@@ -52,9 +52,9 @@ DEFAULT_SAMPLE_SEED = 7
 MAX_LEGITIMATE_POINTS = 1200
 MAX_HELD_OUT_POINTS = 600
 
-# The two highest-ranked real SHAP features (see README Section 7's top
-# SHAP feature table): chosen because they are the model's own most
-# important dimensions, not picked for how the resulting plot looks.
+# The two highest-ranked real SHAP features (see the README's evaluation
+# detail): chosen because they are the model's own most important
+# dimensions, not picked for how the resulting plot looks.
 TERRAIN_FEATURE_X = "agent_prior_session_count"
 TERRAIN_FEATURE_Y = "mandate_prior_use_count"
 

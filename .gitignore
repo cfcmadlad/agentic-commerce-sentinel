@@ -33,3 +33,4 @@ eval_manifests.jsonl
 /.claude/
 /docs/PROJECT_PLAN.md
 /docs/EXECUTION_BRIEF_AGENT_SPRINT.md
+.vercel

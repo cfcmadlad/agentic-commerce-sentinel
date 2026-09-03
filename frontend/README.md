@@ -81,7 +81,7 @@ npm run lint      # oxlint
 
 To exercise the Decisions section against a real running service instead of its fixture fallback,
 set `VITE_API_BASE_URL=http://localhost:8000` in a gitignored `.env.local` before `npm run dev`,
-and run `uvicorn service.main:app --reload` from the repo root (see the root README's Getting Started section).
+and run `uvicorn service.main:app --reload` from the repo root (see the root README's Running It section).
 
 Vite + React + TypeScript, `recharts` for the Evaluation section's charts. No router and no
 state-management dependency — the whole app is one page with local component state.
